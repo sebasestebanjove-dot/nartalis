@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Sparkles, X, Search, TrendingUp, Lightbulb, Trophy } from 'lucide-react';
+import { Search, TrendingUp, Lightbulb, Trophy } from 'lucide-react';
 import type { Medicamento, FarmaView } from './types';
 import { buscarMedicamento, getMedicamentoDetail } from './api';
 import SearchScreen from './screens/SearchScreen';
 import ResultsScreen from './screens/ResultsScreen';
 import DetailScreen from './screens/DetailScreen';
-import DermoWrapper from './dermo/DermoWrapper';
 
 const TIPS = [
   'CIMA contiene información de más de 17.000 medicamentos autorizados en España',
@@ -28,8 +27,6 @@ export default function FarmaWrapper() {
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selected, setSelected] = useState<Medicamento | null>(null);
-  const [showDermo, setShowDermo] = useState(false);
-  const [showFab, setShowFab] = useState(true);
   const [suggestedCorrection, setSuggestedCorrection] = useState<string | undefined>(undefined);
 
   // ─── Sidebar state ──────────────────────────────
@@ -118,13 +115,11 @@ export default function FarmaWrapper() {
   const handleBackToSearch = useCallback(() => {
     setView('search');
     setSelected(null);
-    setShowFab(true);
   }, []);
 
   const handleBackToResults = useCallback(() => {
     setView('results');
     setSelected(null);
-    setShowFab(true);
   }, []);
 
   return (
@@ -144,7 +139,7 @@ export default function FarmaWrapper() {
           medicamento={selected}
           onBack={handleBackToResults}
           loading={detailLoading}
-          onDAtcDetected={(hasD) => setShowFab(!hasD)}
+
         />
       ) : (
         <div className="farma-search-layout">
@@ -239,114 +234,6 @@ export default function FarmaWrapper() {
         </div>
       )}
 
-      {/* FAB pill */}
-      {showFab && <button
-        onClick={() => setShowDermo(true)}
-        style={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          height: 52,
-          borderRadius: 26,
-          border: 'none',
-          background: 'linear-gradient(135deg, #7C3AED, #A78BFA)',
-          color: '#fff',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '0 20px 0 16px',
-          boxShadow: '0 4px 20px rgba(124, 58, 237, 0.45)',
-          transition: 'transform 0.2s, box-shadow 0.2s',
-          zIndex: 40,
-          fontSize: 14,
-          fontWeight: 600,
-          letterSpacing: '0.01em',
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'scale(1.05)';
-          e.currentTarget.style.boxShadow = '0 6px 28px rgba(124, 58, 237, 0.6)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(124, 58, 237, 0.45)';
-        }}
-        aria-label="Abrir Dermofarmacia IA"
-      >
-        <Sparkles size={20} strokeWidth={1.5} />
-        <span className="fab-text">Dermofarmacia IA</span>
-      </button>}
-
-      {/* Overlay Dermofarmacia */}
-      {showDermo && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 50,
-            display: 'flex',
-            flexDirection: 'column',
-            animation: 'dermoFadeIn 0.25s ease-out',
-          }}
-        >
-          {/* Backdrop */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(0, 0, 0, 0.7)',
-              backdropFilter: 'blur(4px)',
-            }}
-            onClick={() => setShowDermo(false)}
-          />
-
-          {/* Content */}
-          <div
-            style={{
-              position: 'relative',
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              animation: 'dermoSlideUp 0.3s ease-out',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Close button */}
-            <button
-              onClick={() => setShowDermo(false)}
-              style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                border: 'none',
-                background: 'rgba(255, 255, 255, 0.1)',
-                color: '#fff',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 10,
-                backdropFilter: 'blur(8px)',
-                transition: 'background 0.2s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'; }}
-              aria-label="Cerrar Dermofarmacia IA"
-            >
-              <X size={20} strokeWidth={1.5} />
-            </button>
-
-            {/* Scrollable content */}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              <DermoWrapper />
-            </div>
-          </div>
-        </div>
-      )}
-
       <style>{`
         @keyframes dermoFadeIn {
           from { opacity: 0; }
@@ -409,9 +296,6 @@ export default function FarmaWrapper() {
             position: static;
             border-radius: 14px;
           }
-        }
-        @media (max-width: 480px) {
-          .fab-text { display: none; }
         }
       `}</style>
     </div>
