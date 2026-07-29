@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
+import { sql } from '@/lib/db';
 import { getDermoSession } from '@/lib/dermo-auth';
-
-const sql = neon(process.env.DATABASE_URL!);
 
 /* POST /api/dermo/searches — log a product search (anonymous, free, or premium) */
 export async function POST(req: NextRequest) {

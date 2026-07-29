@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
+import { sql } from '@/lib/db';
 import { getDermoSession } from '@/lib/dermo-auth';
-
-const sql = neon(process.env.DATABASE_URL!);
 
 const OBF_SEARCH_V1 = 'https://world.openbeautyfacts.org/cgi/search.pl';
 
