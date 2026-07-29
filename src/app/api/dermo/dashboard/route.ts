@@ -20,7 +20,7 @@ function calcConsistency(consultations: number, bookings: number, routines: numb
 
 function calcStreak(consultations: { created_at: string }[]): number {
   if (consultations.length === 0) return 0;
-  const days = consultations.map(c => c.created_at.split('T')[0]).filter(Boolean);
+  const days = (consultations as any[]).map(c => c.created_at.split('T')[0]).filter(Boolean);
   const uniqueDays = [...new Set(days)].sort().reverse();
   if (uniqueDays.length === 0) return 0;
   let streak = 1;
@@ -287,7 +287,7 @@ export async function GET() {
       kpiEvents: parsedKpiEvents,
       skinScoreHistory: skinScoreRows as { score: number; recorded_at: string }[],
       routineLogs: routineLogs as { log_date: string; is_completed: boolean }[],
-      bookings: recentBookings.map(b => ({ created_at: b.created_at, pharmacy_name: b.pharmacy_name, product_name: b.product_name })),
+      bookings: (recentBookings as any[]).map(b => ({ created_at: b.created_at, pharmacy_name: b.pharmacy_name, product_name: b.product_name })),
       goals: goals as { goal_type: string; created_at: string }[],
       userCreatedAt,
       hasRoutine,
@@ -340,12 +340,12 @@ export async function GET() {
       goal_progress: Math.min(totalConsultations * 20, 100),
       milestones,
       skin_score_history: skinScoreHistory.length >= 2 ? skinScoreHistory : [],
-      recent_consultations: recentConsultations.map(c => ({
+      recent_consultations: (recentConsultations as any[]).map(c => ({
         id: c.id,
         query: c.query,
         created_at: c.created_at,
       })),
-      recent_bookings: recentBookings.map(b => ({
+      recent_bookings: (recentBookings as any[]).map(b => ({
         id: b.id,
         product_name: b.product_name,
         pharmacy_name: b.pharmacy_name,
