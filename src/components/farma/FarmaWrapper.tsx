@@ -69,15 +69,8 @@ export default function FarmaWrapper() {
     return () => clearInterval(interval);
   }, []);
 
-  // ─── Refresh stats after each search ────────────
-  const trackSearch = useCallback(() => {
-    // Small delay to let DB insert complete
-    setTimeout(fetchStats, 500);
-  }, [fetchStats]);
-
   // ─── Search handler ──────────────────────────────
   const handleSearch = useCallback(async (q: string, type?: 'text' | 'voice') => {
-    trackSearch();
     setQuery(q);
     setLoading(true);
     setView('results');
@@ -94,8 +87,10 @@ export default function FarmaWrapper() {
       setTotal(0);
     } finally {
       setLoading(false);
+      // Esperar a que la DB registre la búsqueda antes de refrescar stats
+      setTimeout(fetchStats, 2000);
     }
-  }, [trackSearch]);
+  }, [fetchStats]);
 
   const handleSelect = useCallback(async (m: Medicamento) => {
     setDetailLoading(true);
@@ -115,7 +110,8 @@ export default function FarmaWrapper() {
   const handleBackToSearch = useCallback(() => {
     setView('search');
     setSelected(null);
-  }, []);
+    fetchStats();
+  }, [fetchStats]);
 
   const handleBackToResults = useCallback(() => {
     setView('results');
