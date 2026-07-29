@@ -360,9 +360,9 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
   return (
     <div style={styles.container}>
       <div style={styles.hero}>
-        <h1 style={styles.title}>Prospecto Fácil</h1>
+        <h1 style={styles.title}>Nartalis</h1>
         <p style={styles.subtitle}>
-          Busca cualquier medicamento y te mostramos su prospecto en un formato claro y accesible.
+          Te ayuda a cuidar tu salud y la de los tuyos.
         </p>
       </div>
 
