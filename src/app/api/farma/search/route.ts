@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 
 function slugify(nombre: string): string {
@@ -84,6 +85,7 @@ export async function GET(request: NextRequest) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
         for (const r of resultados) await upsertCache(r.nombre, r.registro);
+        revalidatePath('/sitemap.xml');
         return NextResponse.json({
           resultados,
           total: data.totalFilas || resultados.length,
@@ -93,6 +95,7 @@ export async function GET(request: NextRequest) {
 
       try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${q}, ${searchType})`; } catch {}
       for (const r of resultados) await upsertCache(r.nombre, r.registro);
+      revalidatePath('/sitemap.xml');
       return NextResponse.json({ resultados, total: data.totalFilas || resultados.length });
     }
 
@@ -112,6 +115,7 @@ export async function GET(request: NextRequest) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
           for (const r of retryResultados) await upsertCache(r.nombre, r.registro);
+          revalidatePath('/sitemap.xml');
           return NextResponse.json({
             resultados: retryResultados,
             total: retryData.totalFilas || retryResultados.length,
@@ -147,6 +151,7 @@ export async function GET(request: NextRequest) {
                 const correctedBase = (fuzzyResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || correctedNom;
                 try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
                 for (const r of fuzzyResultados) await upsertCache(r.nombre, r.registro);
+                revalidatePath('/sitemap.xml');
                 return NextResponse.json({
                   resultados: fuzzyResultados,
                   total: fuzzyData.totalFilas || fuzzyResultados.length,

@@ -2,6 +2,8 @@ import type { MetadataRoute } from 'next';
 import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
 
+export const revalidate = 3600;
+
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
