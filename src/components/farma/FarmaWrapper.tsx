@@ -216,10 +216,10 @@ export default function FarmaWrapper() {
                 </div>
               </div>
 
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.5rem 0' }} />
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.5rem 0', marginTop: 'auto' }} />
 
               {/* Mini stats */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: 12, color: '#71717A' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', paddingTop: '0.25rem', fontSize: 12, color: '#71717A' }}>
                 <TrendingUp size={14} strokeWidth={2} style={{ color: '#22C55E' }} />
                 <span>Hoy: <strong style={{ color: '#A1A1AA' }}>{dailyCount}</strong></span>
                 <span style={{ color: '#3F3F46' }}>·</span>
