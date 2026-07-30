@@ -17,7 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ];
 
   try {
-    const rows = (await sql`SELECT nombre, nregistro FROM farma_name_cache WHERE updated_at IS NOT NULL`) as { nombre: string; nregistro: string }[];
+    const rows = (await sql`SELECT nombre, nregistro FROM farma_name_cache WHERE updated_at IS NOT NULL AND nregistro !~ 'IP\\d*$'`) as { nombre: string; nregistro: string }[];
 
     const drugPages: MetadataRoute.Sitemap = rows.map(row => ({
       url: `${SITE_URL}/prospectos/${makeSlug(row.nombre, row.nregistro)}`,
