@@ -2,6 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + (a[i - 1] !== b[j - 1] ? 1 : 0),
+      );
+  return dp[m][n];
+}
+
+function isSimilar(q: string, suggestion: string): boolean {
+  const ql = q.toLowerCase();
+  const sl = suggestion.toLowerCase();
+  if (sl.startsWith(ql) || ql.startsWith(sl)) return true;
+  const dist = levenshtein(ql, sl);
+  const maxDist = Math.max(2, Math.floor(ql.length * 0.4));
+  return dist <= maxDist;
+}
+
 function slugify(nombre: string): string {
   return nombre
     .toLowerCase()
@@ -83,13 +107,14 @@ export async function GET(request: NextRequest) {
 
       if (!exactMatch) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
+        const similar = isSimilar(q, correctedBase);
         try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
         for (const r of resultados) await upsertCache(r.nombre, r.registro);
         revalidatePath('/sitemap.xml');
         return NextResponse.json({
           resultados,
           total: data.totalFilas || resultados.length,
-          suggestedCorrection: correctedBase,
+          ...(similar ? { suggestedCorrection: correctedBase } : {}),
         });
       }
 
@@ -113,6 +138,7 @@ export async function GET(request: NextRequest) {
         const retryResultados = mapResultados(retryData);
         if (retryResultados.length > 0) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
+          if (!isSimilar(q, correctedBase)) break;
           try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
           for (const r of retryResultados) await upsertCache(r.nombre, r.registro);
           revalidatePath('/sitemap.xml');
@@ -133,30 +159,32 @@ export async function GET(request: NextRequest) {
           const Fuse = (await import('fuse.js')).default;
           const fuse = new Fuse(rows as { nombre: string; nregistro: string }[], {
             keys: ['nombre'],
-            threshold: 0.4,
+            threshold: 0.25,
             minMatchCharLength: 3,
           });
           const fuseResults = fuse.search(q);
           if (fuseResults.length > 0) {
             const best = fuseResults[0].item;
             const correctedNom = best.nombre;
-            const fuzzyRes = await fetch(
-              `https://cima.aemps.es/cima/rest/medicamentos?nombre=${encodeURIComponent(correctedNom)}`,
-              { signal: AbortSignal.timeout(10000) },
-            );
-            if (fuzzyRes.ok) {
-              const fuzzyData = await fuzzyRes.json();
-              const fuzzyResultados = mapResultados(fuzzyData);
-              if (fuzzyResultados.length > 0) {
-                const correctedBase = (fuzzyResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || correctedNom;
-                try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
-                for (const r of fuzzyResultados) await upsertCache(r.nombre, r.registro);
-                revalidatePath('/sitemap.xml');
-                return NextResponse.json({
-                  resultados: fuzzyResultados,
-                  total: fuzzyData.totalFilas || fuzzyResultados.length,
-                  suggestedCorrection: correctedBase,
-                });
+            const correctedBase = correctedNom.split(/\s+/)[0]?.toLowerCase() || '';
+            if (correctedBase && isSimilar(q, correctedBase)) {
+              const fuzzyRes = await fetch(
+                `https://cima.aemps.es/cima/rest/medicamentos?nombre=${encodeURIComponent(correctedNom)}`,
+                { signal: AbortSignal.timeout(10000) },
+              );
+              if (fuzzyRes.ok) {
+                const fuzzyData = await fuzzyRes.json();
+                const fuzzyResultados = mapResultados(fuzzyData);
+                if (fuzzyResultados.length > 0) {
+                  try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
+                  for (const r of fuzzyResultados) await upsertCache(r.nombre, r.registro);
+                  revalidatePath('/sitemap.xml');
+                  return NextResponse.json({
+                    resultados: fuzzyResultados,
+                    total: fuzzyData.totalFilas || fuzzyResultados.length,
+                    suggestedCorrection: correctedBase,
+                  });
+                }
               }
             }
           }
@@ -165,7 +193,8 @@ export async function GET(request: NextRequest) {
     }
 
     // ─── Sin resultados en ningún intento — no se guarda en log ───
-    return NextResponse.json({ resultados: [], total: 0 });
+    const msg = 'No encontramos "' + q + '" en la base de datos de medicamentos AEMPS. Este producto puede no ser un medicamento registrado en España. Prueba con otro nombre.';
+    return NextResponse.json({ resultados: [], total: 0, message: msg });
   } catch {
     return NextResponse.json({ error: 'Error de conexión con CIMA' }, { status: 502 });
   }

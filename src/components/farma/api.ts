@@ -1,6 +1,6 @@
 import type { Medicamento } from './types';
 
-export async function buscarMedicamento(q: string, type: 'text' | 'voice' = 'text'): Promise<{ resultados: Medicamento[]; total: number; suggestedCorrection?: string }> {
+export async function buscarMedicamento(q: string, type: 'text' | 'voice' = 'text'): Promise<{ resultados: Medicamento[]; total: number; suggestedCorrection?: string; message?: string }> {
   const res = await fetch(`/api/farma/search?q=${encodeURIComponent(q)}&type=${type}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Error de conexión' }));

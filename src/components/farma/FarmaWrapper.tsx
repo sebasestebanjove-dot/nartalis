@@ -28,6 +28,7 @@ export default function FarmaWrapper() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [selected, setSelected] = useState<Medicamento | null>(null);
   const [suggestedCorrection, setSuggestedCorrection] = useState<string | undefined>(undefined);
+  const [message, setMessage] = useState<string | undefined>(undefined);
 
   // ─── Sidebar state ──────────────────────────────
   const [mounted, setMounted] = useState(false);
@@ -75,10 +76,12 @@ export default function FarmaWrapper() {
     setLoading(true);
     setView('results');
     setSuggestedCorrection(undefined);
+    setMessage(undefined);
     try {
       const data = await buscarMedicamento(q, type || 'text');
       setResultados(data.resultados);
       setTotal(data.total);
+      setMessage(data.message);
       if (data.suggestedCorrection) {
         setSuggestedCorrection(data.suggestedCorrection);
       }
@@ -129,6 +132,7 @@ export default function FarmaWrapper() {
           onSelect={handleSelect}
           onBack={handleBackToSearch}
           suggestedCorrection={suggestedCorrection}
+          message={message}
         />
       ) : view === 'detail' && selected ? (
         <DetailScreen

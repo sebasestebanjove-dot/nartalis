@@ -13,6 +13,7 @@ interface Props {
   onSelect: (m: Medicamento) => void;
   onBack: () => void;
   suggestedCorrection?: string;
+  message?: string;
 }
 
 function alertBadges(m: Medicamento): React.ReactNode[] {
@@ -83,7 +84,7 @@ function alertBadges(m: Medicamento): React.ReactNode[] {
   return badges.slice(0, 3);
 }
 
-export default function ResultsScreen({ resultados, total, query, loading, onSelect, onBack, suggestedCorrection }: Props) {
+export default function ResultsScreen({ resultados, total, query, loading, onSelect, onBack, suggestedCorrection, message }: Props) {
   const [visibleCount, setVisibleCount] = useState(5);
   const isFullyShown = visibleCount >= resultados.length;
 
@@ -105,8 +106,8 @@ export default function ResultsScreen({ resultados, total, query, loading, onSel
       ) : resultados.length === 0 ? (
         <div style={styles.noResults}>
           <Pill size={48} style={{ marginBottom: '0.75rem', opacity: 0.4 }} />
-          <p>No se han encontrado resultados para "{query}"</p>
-          <p style={{ fontSize: 16, marginTop: '0.5rem' }}>Prueba con otro nombre de medicamento.</p>
+          <p>{message || `No se han encontrado resultados para "${query}"`}</p>
+          {!message && <p style={{ fontSize: 16, marginTop: '0.5rem' }}>Prueba con otro nombre de medicamento.</p>}
         </div>
       ) : (
         <div>
