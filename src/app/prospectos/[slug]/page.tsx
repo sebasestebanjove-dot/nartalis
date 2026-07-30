@@ -6,6 +6,8 @@ import { makeSlug } from '@/lib/slug';
 import ProspectoView from '@/components/farma/screens/ProspectoView';
 import type { Medicamento } from '@/components/farma/types';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';
+
 interface Props {
   params: Promise<{ slug: string }>;
 }
@@ -146,7 +148,7 @@ export default async function ProspectoPage({ params }: Props) {
     '@type': 'Drug',
     name: m.nombre,
     description: `Información del medicamento ${m.nombre}. Datos oficiales AEMPS.`,
-    url: `https://nartalis.app/prospectos/${canonicalSlug}`,
+    url: `${SITE_URL}/prospectos/${canonicalSlug}`,
     manufacturer: m.laboratorio ? { '@type': 'Organization', name: m.laboratorio } : undefined,
     activeIngredient: m.principiosActivos?.map(p => p.nombre) || undefined,
     dosageForm: m.formaFarmaceutica || undefined,
