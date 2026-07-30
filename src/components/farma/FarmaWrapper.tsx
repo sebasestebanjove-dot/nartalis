@@ -202,28 +202,30 @@ export default function FarmaWrapper() {
               )}
 
               {/* Sabías que... */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flex: 1, minHeight: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 13, fontWeight: 600, color: '#FBBF24' }}>
                   <Lightbulb size={15} strokeWidth={2} />
                   Sabías que...
                 </div>
                 <div style={{
                   fontSize: 13, color: '#A1A1AA', lineHeight: 1.5,
-                  flex: 1, display: 'flex', alignItems: 'flex-start',
                   wordBreak: 'break-word', overflowWrap: 'break-word', hyphens: 'auto',
                 }}>
                   <span key={currentTip} className="farma-tip-text">{TIPS[currentTip]}</span>
                 </div>
               </div>
 
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.5rem 0', marginTop: 'auto' }} />
+              {/* Empuja divider + mini stats al fondo en desktop */}
+              <div style={{ marginTop: 'auto' }}>
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.5rem 0' }} />
 
-              {/* Mini stats */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', paddingTop: '0.25rem', fontSize: 12, color: '#71717A' }}>
-                <TrendingUp size={14} strokeWidth={2} style={{ color: '#22C55E' }} />
-                <span>Hoy: <strong style={{ color: '#A1A1AA' }}>{dailyCount}</strong></span>
-                <span style={{ color: '#3F3F46' }}>·</span>
-                <span>Total: <strong style={{ color: '#A1A1AA' }}>{searchCount.toLocaleString('es-ES')}</strong></span>
+                {/* Mini stats */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: 12, color: '#71717A' }}>
+                  <TrendingUp size={14} strokeWidth={2} style={{ color: '#22C55E' }} />
+                  <span>Hoy: <strong style={{ color: '#A1A1AA' }}>{dailyCount}</strong></span>
+                  <span style={{ color: '#3F3F46' }}>·</span>
+                  <span>Total: <strong style={{ color: '#A1A1AA' }}>{searchCount.toLocaleString('es-ES')}</strong></span>
+                </div>
               </div>
             </div>
           )}
