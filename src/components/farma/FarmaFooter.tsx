@@ -45,6 +45,7 @@ export default function FarmaFooter() {
           <a href="/politica-de-privacidad" style={linkStyle}>Política de Privacidad</a>
           <a href="/terminos-y-condiciones" style={linkStyle}>Términos y Condiciones</a>
           <a href="/aviso-legal" style={linkStyle}>Aviso Legal</a>
+          <a href="/medicamentos" style={linkStyle}>Medicamentos</a>
           <a href="/preguntas-frecuentes" style={linkStyle}>Preguntas Frecuentes</a>
         </nav>
 
