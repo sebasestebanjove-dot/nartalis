@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
+function slugify(nombre: string): string {
+  return nombre
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 80);
+}
+
+async function upsertCache(nombre: string, nregistro: string) {
+  if (!nombre || !nregistro) return;
+  try {
+    await sql`
+      INSERT INTO farma_name_cache (nombre, nregistro)
+      VALUES (${nombre}, ${nregistro})
+      ON CONFLICT (nregistro) DO UPDATE SET
+        nombre = EXCLUDED.nombre,
+        updated_at = NOW()
+    `;
+  } catch { /* silent */ }
+}
+
 function mapResultados(data: any) {
   return (data.resultados || []).map((r: any) => ({
     nombre: r.nombre || '',
@@ -61,6 +83,7 @@ export async function GET(request: NextRequest) {
       if (!exactMatch) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
+        for (const r of resultados) await upsertCache(r.nombre, r.registro);
         return NextResponse.json({
           resultados,
           total: data.totalFilas || resultados.length,
@@ -69,6 +92,7 @@ export async function GET(request: NextRequest) {
       }
 
       try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${q}, ${searchType})`; } catch {}
+      for (const r of resultados) await upsertCache(r.nombre, r.registro);
       return NextResponse.json({ resultados, total: data.totalFilas || resultados.length });
     }
 
@@ -87,6 +111,7 @@ export async function GET(request: NextRequest) {
         if (retryResultados.length > 0) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
+          for (const r of retryResultados) await upsertCache(r.nombre, r.registro);
           return NextResponse.json({
             resultados: retryResultados,
             total: retryData.totalFilas || retryResultados.length,
@@ -121,6 +146,7 @@ export async function GET(request: NextRequest) {
               if (fuzzyResultados.length > 0) {
                 const correctedBase = (fuzzyResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || correctedNom;
                 try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
+                for (const r of fuzzyResultados) await upsertCache(r.nombre, r.registro);
                 return NextResponse.json({
                   resultados: fuzzyResultados,
                   total: fuzzyData.totalFilas || fuzzyResultados.length,

@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Nartalis — Te ayuda a cuidar tu salud y la de los tuyos",
   description: "Nartalis te ayuda a cuidar tu salud y la de los tuyos.",
+  robots: { index: false, follow: true },
 };
 
 export default function RootLayout({
