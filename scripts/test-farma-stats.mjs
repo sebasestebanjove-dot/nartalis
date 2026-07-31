@@ -62,6 +62,9 @@ const par = top.filter((t) => norm(t.q) === 'zzztest-paracetamol');
 
 console.log('Top devuelto:', JSON.stringify(top));
 
+check('GET /api/farma/stats → 200', res.status === 200, `(status=${res.status})`);
+check('Estructura de respuesta correcta', typeof data.totalSearches === 'number' && Array.isArray(data.topQueries) && typeof data.dailyCount === 'number');
+
 check('TEST 1 "Aspirina"/"aspirina"/"ASPIRINA" → UNA sola entrada', asp.length === 1, `(visto ${asp.length})`);
 check('TEST 1 contador = suma de las variantes', asp.length === 1 && asp[0].count === base * 3, `(count=${asp[0]?.count}, esperado ${base * 3})`);
 
@@ -76,9 +79,13 @@ check('TEST 4 ninguna clave normalizada se repite en el Top', dupes.length === 0
 
 check('Etiqueta canónica legible ("Zzztest-aspirina")', asp.length === 1 && asp[0].q === 'Zzztest-aspirina', `(q="${asp[0]?.q}")`);
 
-// Los datos reales preexistentes (almacenados en minúsculas) también se muestran con capitalización canónica
-const aspReal = top.filter((t) => norm(t.q) === 'aspirina');
-check('Datos reales "aspirina" → etiqueta canónica "Aspirina"', aspReal.length === 1 && aspReal[0].q === 'Aspirina', `(q="${aspReal[0]?.q}", count=${aspReal[0]?.count})`);
+// Etiqueta titleCase aplicada a TODOS los elementos del Top.
+// Propiedad funcional determinista: no depende de qué datos reales estén en el Top 5
+// ni de la posición concreta de ninguno de ellos (la producción devuelve titleCase(qkey)
+// y el test reconstruye titleCase(norm(q)) para comparar).
+const titleCase = (s) => String(s).split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+const allCanonical = top.every((t) => t.q === titleCase(norm(t.q)));
+check('Etiqueta titleCase en todos los elementos del Top', allCanonical, `(top=${JSON.stringify(top)})`);
 
 // ── TEST 5 — la búsqueda farmacológica sigue funcionando y el log se normaliza ──
 const s = await fetch(`${BASE}/api/farma/search?q=paracetamol`);

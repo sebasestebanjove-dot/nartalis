@@ -9,10 +9,14 @@ import ResultsScreen from './screens/ResultsScreen';
 import DetailScreen from './screens/DetailScreen';
 import AuthModal from '@/components/auth/AuthModal';
 import type { PublicSessionUser } from '@/lib/auth';
+import { track } from '@/lib/analytics';
 
 interface FarmaWrapperProps {
   initialSessionUser?: PublicSessionUser | null;
 }
+
+// Guardado pendiente tras autenticación (anónimo → guardar). Sin PII.
+const PENDING_SAVE_KEY = 'nartalis_pending_save';
 
 const TIPS = [
   'CIMA contiene información de más de 17.000 medicamentos autorizados en España',
@@ -38,6 +42,39 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
 
   // ─── Auth modal state ────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
+
+  // ─── Sesión (se refresca tras login modal sin recargar) ──
+  const [sessionUser, setSessionUser] = useState<PublicSessionUser | null>(initialSessionUser || null);
+  // nregistro → guardado/favorito para el usuario actual
+  const [savedSet, setSavedSet] = useState<Set<string>>(new Set());
+  const [favoriteMap, setFavoriteMap] = useState<Map<string, boolean>>(new Map());
+
+  // Carga el estado de guardados/favoritos cuando hay sesión.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!sessionUser) {
+        setSavedSet(new Set());
+        setFavoriteMap(new Map());
+        return;
+      }
+      try {
+        const res = await fetch('/api/espacio/medicamentos');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        const saved = new Set<string>();
+        const favs = new Map<string, boolean>();
+        for (const m of data.medicamentos || []) {
+          saved.add(m.nregistro);
+          if (m.is_favorite) favs.set(m.nregistro, true);
+        }
+        setSavedSet(saved);
+        setFavoriteMap(favs);
+      } catch { /* silencioso */ }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionUser]);
 
   // ─── Sidebar state ──────────────────────────────
   const [mounted, setMounted] = useState(false);
@@ -108,6 +145,16 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
     setDetailLoading(true);
     setView('detail');
     setSelected(m);
+
+    // Historial personal: solo usuarios autenticados, fire-and-forget.
+    if (sessionUser && m.registro) {
+      fetch('/api/espacio/historial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nregistro: m.registro, nombre: m.nombre }),
+      }).catch(() => { /* nunca rompe la navegación */ });
+    }
+
     if (m.registro) {
       try {
         const detail = await getMedicamentoDetail(m.registro);
@@ -117,6 +164,99 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
       }
     }
     setDetailLoading(false);
+  }, [sessionUser]);
+
+  const handleSave = useCallback(async (m: Medicamento) => {
+    if (!m.registro) return;
+
+    // Usuario anónimo: guarda pending_save y pide autenticación.
+    if (!sessionUser) {
+      track('save_click_anon');
+      track('save_auth_required');
+      try {
+        sessionStorage.setItem(PENDING_SAVE_KEY, JSON.stringify({ nregistro: m.registro, nombre: m.nombre }));
+      } catch { /* sin almacenamiento: se ignora el guardado pendiente */ }
+      setShowAuth(true);
+      return;
+    }
+
+    track('save_click_auth');
+    try {
+      const res = await fetch('/api/espacio/medicamentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nregistro: m.registro, nombre: m.nombre }),
+      });
+      if (res.ok) {
+        track('save_success');
+        setSavedSet(prev => {
+          const next = new Set(prev);
+          next.add(m.registro!);
+          return next;
+        });
+      }
+    } catch { /* silencioso */ }
+  }, [sessionUser]);
+
+  const handleToggleFavorite = useCallback(async (m: Medicamento) => {
+    if (!m.registro) return;
+    // La estrella solo actúa sobre medicamentos guardados (el detail lo garantiza).
+    const next = !(favoriteMap.get(m.registro) ?? false);
+    setFavoriteMap(prev => {
+      const map = new Map(prev);
+      if (next) map.set(m.registro!, true);
+      else map.delete(m.registro!);
+      return map;
+    });
+    track(next ? 'space_med_favorite' : 'space_med_unfavorite');
+    try {
+      await fetch(`/api/espacio/medicamentos/${encodeURIComponent(m.registro)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_favorite: next }),
+      });
+    } catch { /* silencioso */ }
+  }, [favoriteMap]);
+
+  const handleAuthSuccess = useCallback(async (mode: 'login' | 'register') => {
+    // Si hay un medicamento pendiente de guardar, se completa sin salir del detalle.
+    let pending: { nregistro?: string; nombre?: string } | null = null;
+    try {
+      const raw = sessionStorage.getItem(PENDING_SAVE_KEY);
+      if (raw) pending = JSON.parse(raw) as { nregistro?: string; nombre?: string };
+    } catch { /* sin almacenamiento */ }
+
+    if (pending && pending.nregistro) {
+      try {
+        const res = await fetch('/api/espacio/medicamentos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nregistro: pending.nregistro, nombre: pending.nombre || '' }),
+        });
+        if (res.ok) {
+          track('save_success');
+          setSavedSet(prev => {
+            const next = new Set(prev);
+            next.add(pending!.nregistro!);
+            return next;
+          });
+        }
+      } catch { /* silencioso */ }
+      try { sessionStorage.removeItem(PENDING_SAVE_KEY); } catch { /* sin almacenamiento */ }
+      // Refresca la sesión para actualizar el saludo y el acceso a "Mi espacio".
+      try {
+        const res = await fetch('/api/auth/session');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.authenticated && data.user) setSessionUser(data.user as PublicSessionUser);
+        }
+      } catch { /* silencioso */ }
+      setShowAuth(false);
+      return;
+    }
+
+    // Sin pendiente: comportamiento original (ir a /espacio).
+    window.location.href = mode === 'register' ? '/espacio?welcome=1' : '/espacio';
   }, []);
 
   const handleBackToSearch = useCallback(() => {
@@ -148,7 +288,11 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
           medicamento={selected}
           onBack={handleBackToResults}
           loading={detailLoading}
-
+          sessionUser={sessionUser}
+          isSaved={savedSet.has(selected.registro)}
+          isFavorite={favoriteMap.get(selected.registro) ?? false}
+          onSave={handleSave}
+          onToggleFavorite={handleToggleFavorite}
         />
       ) : (
         <div className="farma-search-layout">
@@ -156,7 +300,7 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
             <SearchScreen
               onSearch={handleSearch}
               initialQuery={query}
-              sessionUser={initialSessionUser}
+              sessionUser={sessionUser}
               onPersonalSpaceCta={() => setShowAuth(true)}
             />
           </div>
@@ -237,9 +381,7 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
         initialMode="register"
         open={showAuth}
         onClose={() => setShowAuth(false)}
-        onSuccess={(mode) => {
-          window.location.href = mode === 'register' ? '/espacio?welcome=1' : '/espacio';
-        }}
+        onSuccess={handleAuthSuccess}
       />
 
       <style>{`

@@ -1,19 +1,27 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import {
   ArrowLeft, Volume2, Square, ExternalLink, Pill,
   AlertTriangle, Car, Dna, FlaskConical, Beaker,
   TriangleAlert, Baby, FileWarning, Info,
+  Bookmark, BookmarkCheck, Star,
 } from 'lucide-react';
 import type { Medicamento, CimaPrincipioActivo } from '../types';
 import { styles } from './styles';
+import type { PublicSessionUser } from '@/lib/auth';
 
 interface Props {
   medicamento: Medicamento;
   onBack: () => void;
   loading?: boolean;
   onDAtcDetected?: (hasD: boolean) => void;
+  sessionUser?: PublicSessionUser | null;
+  isSaved?: boolean;
+  isFavorite?: boolean;
+  onSave?: (m: Medicamento) => void;
+  onToggleFavorite?: (m: Medicamento) => void;
 }
 
 function formatDate(ts: number): string {
@@ -90,7 +98,7 @@ function PrincipiosActivos({ items }: { items: CimaPrincipioActivo[] }) {
   );
 }
 
-export default function DetailScreen({ medicamento, onBack, loading, onDAtcDetected }: Props) {
+export default function DetailScreen({ medicamento, onBack, loading, onDAtcDetected, sessionUser, isSaved = false, isFavorite = false, onSave, onToggleFavorite }: Props) {
   const [speaking, setSpeaking] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
@@ -265,6 +273,42 @@ export default function DetailScreen({ medicamento, onBack, loading, onDAtcDetec
         }}>
           <Info size={14} style={{ flexShrink: 0, marginTop: 2, color: '#FBBF24' }} />
           <span>Esta plataforma es un buscador informativo basado en datos oficiales de la AEMPS y <strong>no sustituye</strong> el consejo, diagnóstico o tratamiento médico profesional.</span>
+        </div>
+
+        {/* Guardar en mi espacio */}
+        <div style={styles.saveBar}>
+          <button
+            onClick={() => {
+              if (isSaved) {
+                onToggleFavorite?.(m);
+              } else {
+                onSave?.(m);
+              }
+            }}
+            aria-label={isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+            aria-pressed={isFavorite}
+            style={{ ...styles.saveStar, ...(isFavorite ? styles.saveStarActive : {}) }}
+          >
+            <Star size={20} fill={isFavorite ? '#FBBF24' : 'none'} />
+          </button>
+
+          {isSaved ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, flexWrap: 'wrap' }}>
+              <span style={styles.saveSaved}>
+                <BookmarkCheck size={17} /> Guardado ✓
+              </span>
+              <Link href="/espacio" style={styles.saveLink}>
+                Ver en mi espacio
+              </Link>
+            </div>
+          ) : (
+            <button
+              onClick={() => onSave?.(m)}
+              style={{ ...styles.saveBtn, flex: 1 }}
+            >
+              <Bookmark size={17} /> {sessionUser ? 'Guardar en mi espacio' : 'Guardar y crear mi espacio gratis'}
+            </button>
+          )}
         </div>
 
         {/* Composición */}
