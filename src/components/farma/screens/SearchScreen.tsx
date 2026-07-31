@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Search, Mic, MicOff, Loader2, AlertTriangle } from 'lucide-react';
+import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, Volume2, ScanText } from 'lucide-react';
 import { styles } from './styles';
+import PersonalSpaceCard from '../PersonalSpaceCard';
+import { track } from '@/lib/analytics';
 
 interface Props {
   onSearch: (q: string, type?: 'text' | 'voice') => void;
@@ -59,8 +61,7 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
   const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [hasVoiceSupport, setHasVoiceSupport] = useState(false);
   const [voiceError, setVoiceError] = useState('');
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -123,6 +124,11 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
       cleanupMedia();
       clearSafetyTimeout();
     };
+  }, []);
+
+  /* ── Analítica FASE 1: la Home (vista de búsqueda) se ha mostrado ── */
+  useEffect(() => {
+    track('home_view');
   }, []);
 
   /* ── fallback: MediaRecorder + Whisper ── */
@@ -353,7 +359,7 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
       case 'connecting': return 'Preparando micrófono...';
       case 'blocked': return 'Haz clic en el candado 🔒 de la URL, permite el micrófono y recarga la página.';
       case 'error': return voiceError ? `Error detectado: ${voiceError}` : 'Búsqueda por voz no disponible temporalmente.';
-      default: return 'Prospectos oficiales AEMPS. Descubre tu ecosistema completo tras registrarte.';
+      default: return 'Prospectos oficiales de la AEMPS. Consulta la información de tus medicamentos de forma sencilla.';
     }
   };
 
@@ -363,6 +369,9 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
         <h1 style={styles.title}>Nartalis</h1>
         <p style={styles.subtitle}>
           Te ayuda a cuidar tu salud y la de los tuyos.
+        </p>
+        <p style={styles.claimSecondary}>
+          Información oficial de medicamentos. Descubre todo lo que Nartalis puede hacer por ti.
         </p>
       </div>
 
@@ -417,28 +426,29 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
       </div>
 
       <div style={styles.infoCards}>
-        <div style={{ ...styles.infoCard, background: 'linear-gradient(135deg, rgba(103,72,253,0.35), rgba(103,72,253,0.12))', border: '1px solid rgba(103,72,253,0.45)', cursor: 'default' }}>
-          <div style={styles.infoCardEmoji}>✨</div>
-          <div style={styles.infoCardText}>
-            <strong>Regístrate ahora <span style={{ fontSize: 18 }}>↗</span></strong>
-          </div>
-        </div>
+        <PersonalSpaceCard />
         <div style={styles.infoCard}>
-          <div style={styles.infoCardEmoji}>💊</div>
+          <div style={styles.infoCardEmoji}>
+            <ShieldCheck size={26} strokeWidth={2} color="#60A5FA" aria-hidden="true" />
+          </div>
           <div style={styles.infoCardText}>
             <strong>Datos oficiales</strong>
             <span style={styles.infoCardSub}>Información directamente de la AEMPS</span>
           </div>
         </div>
         <div style={styles.infoCard}>
-          <div style={styles.infoCardEmoji}>📢</div>
+          <div style={styles.infoCardEmoji}>
+            <Volume2 size={26} strokeWidth={2} color="#34D399" aria-hidden="true" />
+          </div>
           <div style={styles.infoCardText}>
             <strong>Lectura por voz</strong>
             <span style={styles.infoCardSub}>Escucha la información del medicamento</span>
           </div>
         </div>
         <div style={styles.infoCard}>
-          <div style={styles.infoCardEmoji}>🔍</div>
+          <div style={styles.infoCardEmoji}>
+            <ScanText size={26} strokeWidth={2} color="#C084FC" aria-hidden="true" />
+          </div>
           <div style={styles.infoCardText}>
             <strong>Alta legibilidad</strong>
             <span style={styles.infoCardSub}>Texto grande y de alto contraste</span>
