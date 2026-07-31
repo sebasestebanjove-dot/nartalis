@@ -7,6 +7,7 @@ import MedCard from './MedCard';
 import LogoutButton from '@/components/auth/LogoutButton';
 import { track } from '@/lib/analytics';
 import { makeSlug } from '@/lib/slug';
+import type { NartalisRole } from '@/lib/auth';
 
 interface SavedMed {
   nregistro: string;
@@ -24,6 +25,7 @@ interface Consulta {
 interface EspacioDashboardProps {
   name: string;
   welcome?: boolean;
+  role: NartalisRole;
 }
 
 const S = {
@@ -64,6 +66,25 @@ const S = {
   },
   logout: {
     marginTop: '0.75rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.6rem',
+    flexWrap: 'wrap' as const,
+  },
+  adminBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    padding: '0.6rem 1.2rem',
+    borderRadius: 10,
+    background: 'linear-gradient(135deg, #6748FD, #947FFF)',
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: 700,
+    textDecoration: 'none',
+    cursor: 'pointer',
   },
   welcome: {
     maxWidth: 800,
@@ -223,7 +244,7 @@ function formatFecha(ts: string): string {
   return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 }
 
-export default function EspacioDashboard({ name, welcome = false }: EspacioDashboardProps) {
+export default function EspacioDashboard({ name, welcome = false, role }: EspacioDashboardProps) {
   const [medicamentos, setMedicamentos] = useState<SavedMed[]>([]);
   const [consultas, setConsultas] = useState<Consulta[]>([]);
   const [loading, setLoading] = useState(true);
@@ -315,6 +336,11 @@ export default function EspacioDashboard({ name, welcome = false }: EspacioDashb
         <p style={S.sub}>Este es tu espacio personal Nartalis.</p>
         <span style={S.badge}>Plan Free</span>
         <div style={S.logout}>
+          {role === 'ADMIN' && (
+            <Link href="/admin" style={S.adminBtn}>
+              Panel Admin
+            </Link>
+          )}
           <LogoutButton />
         </div>
       </div>

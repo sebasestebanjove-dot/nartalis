@@ -26,7 +26,7 @@ export default async function EspacioPage({ searchParams }: { searchParams: Espa
 
   return (
     <>
-      <EspacioDashboard name={user.name || 'Mi cuenta'} welcome={welcome} />
+      <EspacioDashboard name={user.name || 'Mi cuenta'} welcome={welcome} role={user.role} />
       <Suspense fallback={null}>
         <EspacioSaveResolver />
         <AuthResultTracker result="success" />
