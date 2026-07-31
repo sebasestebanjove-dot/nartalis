@@ -7,6 +7,12 @@ import { buscarMedicamento, getMedicamentoDetail } from './api';
 import SearchScreen from './screens/SearchScreen';
 import ResultsScreen from './screens/ResultsScreen';
 import DetailScreen from './screens/DetailScreen';
+import AuthModal from '@/components/auth/AuthModal';
+import type { PublicSessionUser } from '@/lib/auth';
+
+interface FarmaWrapperProps {
+  initialSessionUser?: PublicSessionUser | null;
+}
 
 const TIPS = [
   'CIMA contiene información de más de 17.000 medicamentos autorizados en España',
@@ -19,7 +25,7 @@ const TIPS = [
   'La AEMPS recibe más de 40.000 notificaciones de reacciones adversas al año',
 ];
 
-export default function FarmaWrapper() {
+export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapperProps = {}) {
   const [view, setView] = useState<FarmaView>('search');
   const [query, setQuery] = useState('');
   const [resultados, setResultados] = useState<Medicamento[]>([]);
@@ -29,6 +35,9 @@ export default function FarmaWrapper() {
   const [selected, setSelected] = useState<Medicamento | null>(null);
   const [suggestedCorrection, setSuggestedCorrection] = useState<string | undefined>(undefined);
   const [message, setMessage] = useState<string | undefined>(undefined);
+
+  // ─── Auth modal state ────────────────────────────
+  const [showAuth, setShowAuth] = useState(false);
 
   // ─── Sidebar state ──────────────────────────────
   const [mounted, setMounted] = useState(false);
@@ -144,7 +153,12 @@ export default function FarmaWrapper() {
       ) : (
         <div className="farma-search-layout">
           <div className="farma-search-main">
-            <SearchScreen onSearch={handleSearch} initialQuery={query} />
+            <SearchScreen
+              onSearch={handleSearch}
+              initialQuery={query}
+              sessionUser={initialSessionUser}
+              onPersonalSpaceCta={() => setShowAuth(true)}
+            />
           </div>
           {mounted && (
             <div className="farma-search-sidebar">
@@ -218,6 +232,15 @@ export default function FarmaWrapper() {
           )}
         </div>
       )}
+
+      <AuthModal
+        initialMode="register"
+        open={showAuth}
+        onClose={() => setShowAuth(false)}
+        onSuccess={(mode) => {
+          window.location.href = mode === 'register' ? '/espacio?welcome=1' : '/espacio';
+        }}
+      />
 
       <style>{`
         @keyframes dermoFadeIn {

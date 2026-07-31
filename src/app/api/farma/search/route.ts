@@ -35,6 +35,12 @@ function slugify(nombre: string): string {
     .substring(0, 80);
 }
 
+// Clave estadística normalizada: las búsquedas con variaciones de
+// mayúsculas/minúsculas y espacios deben incrementar el MISMO contador.
+function normalizeSearch(q: string): string {
+  return q.trim().toLowerCase();
+}
+
 async function upsertCache(nombre: string, nregistro: string) {
   if (!nombre || !nregistro) return;
   try {
@@ -108,7 +114,7 @@ export async function GET(request: NextRequest) {
       if (!exactMatch) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         const similar = isSimilar(q, correctedBase);
-        try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
+        try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(correctedBase)}, ${searchType})`; } catch {}
         for (const r of resultados) await upsertCache(r.nombre, r.registro);
         revalidatePath('/sitemap.xml');
         return NextResponse.json({
@@ -118,7 +124,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${q}, ${searchType})`; } catch {}
+      try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(q)}, ${searchType})`; } catch {}
       for (const r of resultados) await upsertCache(r.nombre, r.registro);
       revalidatePath('/sitemap.xml');
       return NextResponse.json({ resultados, total: data.totalFilas || resultados.length });
@@ -139,7 +145,7 @@ export async function GET(request: NextRequest) {
         if (retryResultados.length > 0) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           if (!isSimilar(q, correctedBase)) break;
-          try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
+          try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(correctedBase)}, ${searchType})`; } catch {}
           for (const r of retryResultados) await upsertCache(r.nombre, r.registro);
           revalidatePath('/sitemap.xml');
           return NextResponse.json({
@@ -176,7 +182,7 @@ export async function GET(request: NextRequest) {
                 const fuzzyData = await fuzzyRes.json();
                 const fuzzyResultados = mapResultados(fuzzyData);
                 if (fuzzyResultados.length > 0) {
-                  try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${correctedBase}, ${searchType})`; } catch {}
+                  try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(correctedBase)}, ${searchType})`; } catch {}
                   for (const r of fuzzyResultados) await upsertCache(r.nombre, r.registro);
                   revalidatePath('/sitemap.xml');
                   return NextResponse.json({

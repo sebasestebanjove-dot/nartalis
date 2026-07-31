@@ -1,11 +1,18 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { HeartPulse } from 'lucide-react';
 import { styles } from './screens/styles';
 import { track } from '@/lib/analytics';
+import type { PublicSessionUser } from '@/lib/auth';
 
-export default function PersonalSpaceCard() {
+interface PersonalSpaceCardProps {
+  onCta?: () => void;
+  sessionUser?: PublicSessionUser | null;
+}
+
+export default function PersonalSpaceCard({ onCta, sessionUser = null }: PersonalSpaceCardProps = {}) {
   const ref = useRef<HTMLDivElement | null>(null);
   const viewTracked = useRef(false);
 
@@ -24,10 +31,10 @@ export default function PersonalSpaceCard() {
 
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     track('personal_space_cta_click');
-    // FASE 1: la ruta de registro no existe aún.
-    // El CTA queda preparado arquitectónicamente para FASE 2:
-    // eliminar el preventDefault cuando la ruta /registro esté disponible.
-    e.preventDefault();
+    if (onCta) {
+      e.preventDefault();
+      onCta();
+    }
   };
 
   return (
@@ -42,16 +49,28 @@ export default function PersonalSpaceCard() {
           <span style={styles.psCardExtra}>Favoritos, historial y alertas siempre contigo.</span>
         </div>
       </div>
-      <a
-        href="/registro"
-        className="ps-cta"
-        onClick={handleClick}
-        style={styles.psCardCta}
-        role="button"
-        aria-label="Crear mi espacio gratis"
-      >
-        Crear mi espacio gratis
-      </a>
+      {sessionUser ? (
+        <Link
+          href="/espacio"
+          className="ps-cta"
+          onClick={() => track('account_space_click')}
+          style={styles.psCardCta}
+          aria-label="Entrar en mi espacio"
+        >
+          Entrar en mi espacio
+        </Link>
+      ) : (
+        <a
+          href="/registro"
+          className="ps-cta"
+          onClick={handleClick}
+          style={styles.psCardCta}
+          role="button"
+          aria-label="Crear mi espacio gratis"
+        >
+          Crear mi espacio gratis
+        </a>
+      )}
       <style>{`
         .ps-cta:focus-visible {
           outline: 2px solid #FFFFFF;

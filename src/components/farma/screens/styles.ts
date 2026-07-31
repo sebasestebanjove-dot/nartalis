@@ -140,7 +140,7 @@ export const styles: Record<string, CSSProperties> = {
     display: 'block',
     fontSize: 16,
     color: fgMuted,
-    marginTop: '0.15rem',
+    marginTop: '0.25rem',
   },
 
   claimSecondary: {
@@ -149,6 +149,35 @@ export const styles: Record<string, CSSProperties> = {
     margin: '0.6rem 0 0',
     lineHeight: 1.5,
     fontWeight: 400,
+  },
+
+  accountBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.6rem',
+    marginTop: '1.5rem',
+    flexWrap: 'wrap',
+  },
+  accountGreeting: {
+    fontSize: 15,
+    color: '#D4D4D8',
+    fontWeight: 600,
+  },
+  accountLink: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.3rem',
+    padding: '0.4rem 0.9rem',
+    borderRadius: 999,
+    background: 'rgba(103,72,253,0.18)',
+    border: '1px solid rgba(103,72,253,0.45)',
+    color: '#C4B5FD',
+    fontSize: 14,
+    fontWeight: 700,
+    textDecoration: 'none',
+    fontFamily: 'inherit',
+    transition: 'background 0.15s, border-color 0.15s',
   },
 
   psCard: {
@@ -189,14 +218,14 @@ export const styles: Record<string, CSSProperties> = {
     fontSize: 16,
     color: fgMuted,
     lineHeight: 1.4,
-    marginTop: '0.15rem',
+    marginTop: '0.25rem',
   },
   psCardExtra: {
     display: 'block',
     fontSize: 14,
     color: fgMuted,
     lineHeight: 1.4,
-    marginTop: '0.1rem',
+    marginTop: '0.15rem',
   },
   psCardCta: {
     display: 'flex',

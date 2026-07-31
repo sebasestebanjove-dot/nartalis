@@ -1,21 +1,35 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
+// Etiqueta legible/canónica para el Top: "aspirina" → "Aspirina".
+function titleCase(s: string): string {
+  return s
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 export async function GET() {
   try {
     const totalRows = await sql`SELECT COUNT(*) as cnt FROM farma_search_log`;
     const totalSearches = Number(totalRows[0]?.cnt || 0);
 
+    // Agrupación por clave normalizada (LOWER + TRIM): "Aspirina", "aspirina",
+    // "ASPIRINA" y "  Aspirina  " se contabilizan como UNA sola búsqueda.
     const topRows = await sql`
-      SELECT query, COUNT(*) as cnt
+      SELECT
+        LOWER(TRIM(query)) AS qkey,
+        COUNT(*) AS cnt
       FROM farma_search_log
-      GROUP BY query
+      WHERE query IS NOT NULL AND TRIM(query) <> ''
+      GROUP BY LOWER(TRIM(query))
       ORDER BY cnt DESC
       LIMIT 5
     `;
 
     const topQueries = topRows.map((r: any) => ({
-      q: r.query,
+      q: titleCase(String(r.qkey)),
       count: Number(r.cnt),
     }));
 

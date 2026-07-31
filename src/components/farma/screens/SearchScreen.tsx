@@ -1,14 +1,18 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, Volume2, ScanText } from 'lucide-react';
+import Link from 'next/link';
+import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, Volume2, ScanText, ArrowRight } from 'lucide-react';
 import { styles } from './styles';
 import PersonalSpaceCard from '../PersonalSpaceCard';
 import { track } from '@/lib/analytics';
+import type { PublicSessionUser } from '@/lib/auth';
 
 interface Props {
   onSearch: (q: string, type?: 'text' | 'voice') => void;
+  onPersonalSpaceCta?: () => void;
   initialQuery?: string;
+  sessionUser?: PublicSessionUser | null;
 }
 
 declare global {
@@ -56,7 +60,14 @@ type MicStatus = 'idle' | 'connecting' | 'listening' | 'recording' | 'blocked' |
 
 const VOICE_TIMEOUT_MS = 8000;
 
-export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
+function getFirstName(name?: string | null): string | null {
+  if (!name) return null;
+  const first = name.trim().split(/\s+/)[0];
+  if (!first) return null;
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSpaceCta, sessionUser = null }: Props) {
   const [query, setQuery] = useState(initialQuery);
   const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [hasVoiceSupport, setHasVoiceSupport] = useState(false);
@@ -363,6 +374,11 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
     }
   };
 
+  const accountGreeting = (() => {
+    const displayName = getFirstName(sessionUser?.name);
+    return displayName ? `Hola, ${displayName}` : 'Mi cuenta';
+  })();
+
   return (
     <div style={styles.container}>
       <div style={styles.hero}>
@@ -373,6 +389,23 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
         <p style={styles.claimSecondary}>
           Información oficial de medicamentos. Descubre todo lo que Nartalis puede hacer por ti.
         </p>
+        {sessionUser && (
+          <div style={styles.accountBar}>
+            <span style={styles.accountGreeting}>
+              {accountGreeting}
+            </span>
+            <Link
+              href="/espacio"
+              className="farma-account-link"
+              onClick={() => track('account_space_click')}
+              style={styles.accountLink}
+              aria-label="Mi espacio"
+            >
+              Mi espacio
+              <ArrowRight size={15} strokeWidth={2.5} aria-hidden="true" />
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="farma-search-box" style={styles.searchBox}>
@@ -426,7 +459,7 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
       </div>
 
       <div style={styles.infoCards}>
-        <PersonalSpaceCard />
+        <PersonalSpaceCard onCta={onPersonalSpaceCta} sessionUser={sessionUser} />
         <div style={styles.infoCard}>
           <div style={styles.infoCardEmoji}>
             <ShieldCheck size={26} strokeWidth={2} color="#60A5FA" aria-hidden="true" />
@@ -469,6 +502,14 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
         }
         @media (max-width: 480px) {
           .farma-search-box { padding: 1rem !important; }
+        }
+        .farma-account-link:hover {
+          background: rgba(103,72,253,0.32);
+          border-color: rgba(148,127,255,0.65);
+        }
+        .farma-account-link:focus-visible {
+          outline: 2px solid #C4B5FD;
+          outline-offset: 2px;
         }
       `}</style>
     </div>
