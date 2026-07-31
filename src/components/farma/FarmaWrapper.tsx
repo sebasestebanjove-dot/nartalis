@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Search, TrendingUp, Lightbulb, Trophy } from 'lucide-react';
+import { TrendingUp, Lightbulb, Trophy } from 'lucide-react';
 import type { Medicamento, FarmaView } from './types';
 import { buscarMedicamento, getMedicamentoDetail } from './api';
 import SearchScreen from './screens/SearchScreen';
@@ -148,66 +148,62 @@ export default function FarmaWrapper() {
           </div>
           {mounted && (
             <div className="farma-search-sidebar">
-              {/* Contador global */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: '0.4rem',
-                padding: '0.5rem 0.7rem', borderRadius: 10,
-                background: 'rgba(59,130,246,0.08)',
-                border: '1px solid rgba(59,130,246,0.2)',
-              }}>
-                <Search size={16} strokeWidth={2} style={{ color: '#3B82F6', flexShrink: 0 }} />
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#E4E4E7' }}>
-                  {searchCount.toLocaleString('es-ES')}
-                </span>
-                <span style={{ fontSize: 12, color: '#A1A1AA', lineHeight: 1.2 }}>búsquedas</span>
+              {/* Bloque 1: Top búsquedas + resumen diario/total */}
+              <div className="farma-side-block">
+                {topSearches.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 13, fontWeight: 600, color: '#E4E4E7', marginBottom: '0.4rem' }}>
+                      <Trophy size={15} strokeWidth={2} style={{ color: '#F59E0B' }} />
+                      Top 5 más buscados
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.6rem' }}>
+                      {topSearches.map((s, i) => (
+                        <button
+                          key={s.q}
+                          onClick={() => handleSearch(s.q)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.4rem',
+                            width: '100%', minHeight: 44,
+                            padding: '0.35rem 0.5rem', borderRadius: 8, border: 'none',
+                            background: i === 0 ? 'rgba(245,158,11,0.08)' : 'transparent',
+                            color: '#D4D4D8', fontSize: 13, cursor: 'pointer',
+                            fontFamily: 'inherit', textAlign: 'left', transition: 'background 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = i === 0 ? 'rgba(245,158,11,0.08)' : 'transparent' }}
+                        >
+                          <span style={{
+                            fontSize: 12, fontWeight: 700,
+                            color: i < 3 ? '#F59E0B' : '#52525B',
+                            minWidth: 16, textAlign: 'right',
+                          }}>{i + 1}</span>
+                          <span style={{
+                            flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          }}>{s.q}</span>
+                          <span style={{
+                            fontSize: 12, fontWeight: 700, color: '#A1A1AA',
+                            background: 'rgba(255,255,255,0.05)', padding: '0.15rem 0.4rem', borderRadius: 4,
+                          }}>{s.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.5rem 0' }} />
+
+                {/* Resumen: búsquedas hoy y total */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: 12, color: '#71717A' }}>
+                  <TrendingUp size={14} strokeWidth={2} style={{ color: '#22C55E' }} />
+                  <span>Hoy: <strong style={{ color: '#A1A1AA' }}>{dailyCount}</strong></span>
+                  <span style={{ color: '#3F3F46' }}>·</span>
+                  <span>Total: <strong style={{ color: '#A1A1AA' }}>{searchCount.toLocaleString('es-ES')}</strong></span>
+                </div>
               </div>
 
-              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.6rem 0' }} />
-
-              {/* Top 5 más buscados — clickeables */}
-              {topSearches.length > 0 && (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 13, fontWeight: 600, color: '#E4E4E7', marginBottom: '0.4rem' }}>
-                    <Trophy size={15} strokeWidth={2} style={{ color: '#F59E0B' }} />
-                    Top 5 más buscados
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginBottom: '0.6rem' }}>
-                    {topSearches.map((s, i) => (
-                      <button
-                        key={s.q}
-                        onClick={() => handleSearch(s.q)}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '0.4rem',
-                          width: '100%', minHeight: 44,
-                          padding: '0.35rem 0.5rem', borderRadius: 8, border: 'none',
-                          background: i === 0 ? 'rgba(245,158,11,0.08)' : 'transparent',
-                          color: '#D4D4D8', fontSize: 13, cursor: 'pointer',
-                          fontFamily: 'inherit', textAlign: 'left', transition: 'background 0.15s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = i === 0 ? 'rgba(245,158,11,0.08)' : 'transparent' }}
-                      >
-                        <span style={{
-                          fontSize: 12, fontWeight: 700,
-                          color: i < 3 ? '#F59E0B' : '#52525B',
-                          minWidth: 16, textAlign: 'right',
-                        }}>{i + 1}</span>
-                        <span style={{
-                          flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}>{s.q}</span>
-                        <span style={{
-                          fontSize: 12, fontWeight: 700, color: '#A1A1AA',
-                          background: 'rgba(255,255,255,0.05)', padding: '0.15rem 0.4rem', borderRadius: 4,
-                        }}>{s.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {/* Sabías que... */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 13, fontWeight: 600, color: '#FBBF24' }}>
+              {/* Bloque 2: Sabías que... */}
+              <div className="farma-side-block">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: 13, fontWeight: 600, color: '#FBBF24', marginBottom: '0.4rem' }}>
                   <Lightbulb size={15} strokeWidth={2} />
                   Sabías que...
                 </div>
@@ -216,19 +212,6 @@ export default function FarmaWrapper() {
                   wordBreak: 'break-word', overflowWrap: 'break-word', hyphens: 'auto',
                 }}>
                   <span key={currentTip} className="farma-tip-text">{TIPS[currentTip]}</span>
-                </div>
-              </div>
-
-              {/* Empuja divider + mini stats al fondo en desktop */}
-              <div style={{ marginTop: 'auto' }}>
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0.5rem 0' }} />
-
-                {/* Mini stats */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: 12, color: '#71717A' }}>
-                  <TrendingUp size={14} strokeWidth={2} style={{ color: '#22C55E' }} />
-                  <span>Hoy: <strong style={{ color: '#A1A1AA' }}>{dailyCount}</strong></span>
-                  <span style={{ color: '#3F3F46' }}>·</span>
-                  <span>Total: <strong style={{ color: '#A1A1AA' }}>{searchCount.toLocaleString('es-ES')}</strong></span>
                 </div>
               </div>
             </div>
@@ -266,18 +249,19 @@ export default function FarmaWrapper() {
           flex: 0 0 220px;
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
+          gap: 0.85rem;
+          position: sticky;
+          top: 1rem;
+        }
+        .farma-side-block {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
           padding: 0.85rem;
           border-radius: 14px;
           background: rgba(24,24,27,0.88);
           backdrop-filter: blur(14px);
           border: 1px solid rgba(255,255,255,0.07);
-          max-height: 65vh;
-          overflow-y: auto;
-          overflow-x: hidden;
-          scrollbar-width: thin;
-          position: sticky;
-          top: 1rem;
         }
         .farma-tip-text {
           animation: farmaFadeIn 0.4s ease-out;
@@ -297,9 +281,7 @@ export default function FarmaWrapper() {
           }
           .farma-search-sidebar {
             width: 100%;
-            max-height: none;
             position: static;
-            border-radius: 14px;
           }
         }
       `}</style>
