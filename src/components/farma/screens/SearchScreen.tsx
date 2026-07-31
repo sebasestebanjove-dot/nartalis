@@ -80,7 +80,20 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   const didErrorRef = useRef(false);
   const langRetriedRef = useRef(false);
   const onSearchRef = useRef(onSearch);
+  const stopRequestedRef = useRef(false);
+  const searchedThisCycleRef = useRef(false);
   onSearchRef.current = onSearch;
+
+  const doVoiceSearch = (transcript: string) => {
+    const text = transcript.trim();
+    if (text.length >= 2) {
+      setQuery(text);
+      if (!searchedThisCycleRef.current) {
+        searchedThisCycleRef.current = true;
+        onSearchRef.current(text, 'voice');
+      }
+    }
+  };
 
   /* ── helpers (solo dependen de refs — sin stale closure) ── */
 
@@ -176,8 +189,12 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
         setMicStatus('connecting');
         try {
           const text = await transcribeAudio(blob);
-          if (text) { setQuery(text); if (text.length >= 2) onSearchRef.current(text, 'voice'); }
-        } catch (err) { console.error('Transcripción falló:', err); }
+          if (text) { doVoiceSearch(text); }
+        } catch (err) {
+          console.error('Transcripción falló:', err);
+          setVoiceError('Error al transcribir el audio');
+          setMicStatus('error');
+        }
         resetToIdle();
       };
       recorder.start();
@@ -190,49 +207,33 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
     }
   };
 
-  /* ── handleVoiceClick (SÍNCRONO — user activation preserved) ──
+  /* ── Pulsar / Mantener / Soltar ──
 
-       Lazy init: la instancia SpeechRecognition se crea UNA SOLA VEZ.
-       Handler refresh: los eventos se re‑bindan cada vez antes de start()
-       para evitar stale closures y pérdida de contexto del evento.
+     startVoiceGrab (pointerdown): inicia captura → estado ROJO.
+     stopVoiceGrab (pointerup / pointercancel / pointerleave): detiene captura →
+     la transcripción (fallback) o el onresult (SR) dispara la búsqueda
+     automáticamente. Nunca 2 búsquedas: searchedThisCycleRef evita dup.
   */
 
-  const handleVoiceClick = () => {
-    /* Guard: sin soporte → blocked silencioso */
+  const startVoiceGrab = () => {
     if (!hasVoiceSupport) {
       setMicStatus('blocked');
       return;
     }
+    if (micStatus !== 'idle') return;
 
-    /* Toggle-off si está escuchando */
-    if (micStatus === 'listening' && recognitionRef.current) {
-      recognitionRef.current.stop();
-      resetToIdle();
-      return;
-    }
+    searchedThisCycleRef.current = false;
+    stopRequestedRef.current = false;
+    clearSafetyTimeout();
 
-    /* Toggle-off si está grabando con fallback */
-    if (micStatus === 'recording' && mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      resetToIdle();
-      return;
-    }
-
-    /* Ignorar si está en transición */
-    if (micStatus === 'connecting') return;
-
-    /* ── Phase 1: SpeechRecognition (lazy init + handler refresh) ── */
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const SpeechRecognitionAPI = (typeof window !== 'undefined') && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
     if (SpeechRecognitionAPI) {
-      /* Lazy init: instancia UNA SOLA VEZ (persistente entre clicks) */
       if (!recognitionRef.current) {
         recognitionRef.current = new SpeechRecognitionAPI();
       }
-
       const recognition = recognitionRef.current;
 
-      /* Propiedades estáticas (idempotente) */
       const stringsIdioma = [navigator.language, 'es-ES', 'es'];
       recognition.lang = stringsIdioma.find(lang => lang && lang.startsWith('es')) || 'es-ES';
       recognition.continuous = false;
@@ -241,32 +242,25 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
         (recognition as any).processLocally = true;
       }
 
-      /* Re‑bindear handlers CADA VEZ antes de start() — evita stale closures */
       recognition.onstart = () => {
         startedRef.current = true;
-        clearSafetyTimeout();
         setMicStatus('listening');
       };
 
       recognition.onresult = (e: any) => {
         const transcript = e.results[0][0].transcript;
         setQuery(transcript);
-        if (transcript.trim().length >= 2) {
-          onSearchRef.current(transcript.trim(), 'voice');
-        }
+        doVoiceSearch(transcript);
       };
 
       recognition.onerror = (e: any) => {
         console.error('Speech error:', e.error);
         clearSafetyTimeout();
-
         if (e.error === 'language-not-supported' && !langRetriedRef.current) {
           langRetriedRef.current = true;
           recognition.lang = '';
-          clearSafetyTimeout();
           try { recognition.start(); return; } catch {}
         }
-
         didErrorRef.current = true;
         if (e.error !== 'language-not-supported') {
           setVoiceError(String(e.error));
@@ -286,10 +280,13 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
           resetRefs();
           return;
         }
-        resetToIdle();
+        if (!stopRequestedRef.current) {
+          resetToIdle();
+        } else {
+          resetToIdle();
+        }
       };
 
-      /* Timeout de seguridad: 4s — aborta si onstart no dispara */
       clearSafetyTimeout();
       timeoutRef.current = setTimeout(() => {
         if (!startedRef.current && recognitionRef.current) {
@@ -302,7 +299,6 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
         }
       }, VOICE_TIMEOUT_MS);
 
-      /* START síncrono — dentro del user gesture */
       try {
         setMicStatus('connecting');
         recognition.start();
@@ -314,10 +310,18 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       }
     }
 
-    /* ── Phase 2 (fallback): no hay SR o start() lanzó excepción ── */
     setMicStatus('connecting');
     startRecordingFallback();
   };
+
+  const stopVoiceGrab = () => {
+    stopRequestedRef.current = true;
+    if (recognitionRef.current && micStatus === 'listening') {
+      try { recognitionRef.current.stop(); } catch {}
+    } else if (mediaRecorderRef.current && micStatus === 'recording') {
+      try { mediaRecorderRef.current.stop(); } catch {}
+    }
+   };
 
   const handleSearch = () => {
     const q = query.trim();
@@ -332,8 +336,8 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
 
   const getMicStyle = () => {
     switch (micStatus) {
-      case 'listening': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
-      case 'recording': return { borderColor: '#F59E0B', background: 'rgba(245,158,11,0.1)' };
+       case 'listening': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
+       case 'recording': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
       case 'connecting': return { borderColor: '#3B82F6', background: 'rgba(59,130,246,0.1)' };
       case 'blocked': return { borderColor: '#F97316', background: 'rgba(249,115,22,0.1)' };
       case 'error': return { borderColor: '#A1A1AA', background: 'rgba(161,161,170,0.08)' };
@@ -344,8 +348,8 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   const getMicIcon = () => {
     switch (micStatus) {
       case 'connecting': return <Loader2 size={28} className="farma-spin" color="#3B82F6" />;
-      case 'listening': return <MicOff size={28} color="#EF4444" />;
-      case 'recording': return <Loader2 size={28} className="farma-spin" color="#F59E0B" />;
+       case 'listening': return <MicOff size={28} color="#EF4444" />;
+       case 'recording': return <Loader2 size={28} className="farma-spin" color="#EF4444" />;
       case 'blocked': return <AlertTriangle size={28} color="#F97316" />;
       case 'error': return <MicOff size={28} color="#A1A1AA" />;
       default: return <Mic size={28} />;
@@ -356,10 +360,10 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
     switch (micStatus) {
       case 'connecting': return 'Conectando...';
       case 'listening': return 'Escuchando...';
-      case 'recording': return 'Grabando...';
+      case 'recording': return 'Escuchando...';
       case 'blocked': return 'Micrófono bloqueado';
       case 'error': return 'Voz no disponible';
-      default: return hasVoiceSupport ? 'Buscar por voz' : 'Voz no disponible';
+      default: return hasVoiceSupport ? 'Pulsa y mantén para hablar' : 'Voz no disponible';
     }
   };
 
@@ -370,7 +374,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       case 'connecting': return 'Preparando micrófono...';
       case 'blocked': return 'Haz clic en el candado 🔒 de la URL, permite el micrófono y recarga la página.';
       case 'error': return voiceError ? `Error detectado: ${voiceError}` : 'Búsqueda por voz no disponible temporalmente.';
-      default: return 'Prospectos oficiales de la AEMPS. Consulta la información de tus medicamentos de forma sencilla.';
+      default: return 'Pulsa y mantén el micrófono y habla el nombre del medicamento.';
     }
   };
 
@@ -433,23 +437,24 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
         <div style={styles.separator}>o</div>
 
         <button
-          onClick={handleVoiceClick}
+          onPointerDown={startVoiceGrab}
+          onPointerUp={stopVoiceGrab}
+          onPointerLeave={stopVoiceGrab}
+          onPointerCancel={stopVoiceGrab}
           disabled={micStatus === 'connecting'}
-          aria-label={micStatus === 'listening' ? 'Detener grabación' : 'Buscar por voz'}
+          aria-label={micStatus === 'listening' || micStatus === 'recording' ? 'Detener grabación' : 'Buscar por voz'}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
             width: '100%', minHeight: 56,
             padding: '0.85rem', borderRadius: 14,
-            background: micStatus === 'idle' ? 'linear-gradient(135deg, #059669, #10B981)' : '#1C1C1E',
-            border: micStatus === 'idle' ? 'none' : '2px solid #3A3A3C',
-            color: micStatus === 'idle' ? '#fff' : '#34D399',
+            background: micStatus === 'idle' ? 'linear-gradient(135deg, #059669, #10B981)' : (micStatus === 'listening' || micStatus === 'recording' ? 'rgba(239,68,68,0.15)' : '#1C1C1E'),
+            border: micStatus === 'idle' ? 'none' : (micStatus === 'listening' || micStatus === 'recording' ? '2px solid #EF4444' : '2px solid #3A3A3C'),
+            color: micStatus === 'idle' ? '#fff' : (micStatus === 'listening' || micStatus === 'recording' ? '#EF4444' : '#34D399'),
             fontSize: 20, fontWeight: 700, cursor: micStatus === 'connecting' ? 'default' : 'pointer',
             fontFamily: 'inherit', transition: 'transform 0.15s, box-shadow 0.15s',
             boxShadow: micStatus === 'idle' ? '0 4px 16px rgba(16,185,129,0.3)' : 'none',
             animation: micStatus === 'idle' ? 'farmaMicPulse 2.5s ease-in-out infinite' : 'none',
           }}
-          onMouseEnter={e => { if (micStatus === 'idle') { e.currentTarget.style.transform = 'scale(1.02)'; e.currentTarget.style.boxShadow = '0 6px 24px rgba(16,185,129,0.45)'; } }}
-          onMouseLeave={e => { if (micStatus === 'idle') { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(16,185,129,0.3)'; } }}
         >
           {getMicIcon()}
           <span>{getMicLabel()}</span>
