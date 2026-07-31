@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
+import { getNartalisSession } from '@/lib/auth';
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
@@ -39,6 +40,23 @@ function slugify(nombre: string): string {
 // mayúsculas/minúsculas y espacios deben incrementar el MISMO contador.
 function normalizeSearch(q: string): string {
   return q.trim().toLowerCase();
+}
+
+// Persistencia de búsqueda (FASE 6/6A): registra user_id (solo server-side),
+// result_count real y was_successful. Nunca falla la búsqueda del usuario.
+async function logSearch(opts: {
+  query: string;
+  searchType: 'text' | 'voice';
+  userId: string | null;
+  resultCount: number;
+  wasSuccessful: boolean;
+}) {
+  try {
+    await sql`
+      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful)
+      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful})
+    `;
+  } catch { /* el logging nunca debe romper la búsqueda */ }
 }
 
 async function upsertCache(nombre: string, nregistro: string) {
@@ -84,13 +102,21 @@ function mapResultados(data: any) {
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get('q')?.trim();
-  const searchType = request.nextUrl.searchParams.get('type')?.trim() || 'text';
-  if (!['text', 'voice'].includes(searchType)) {
+  const typeParam = request.nextUrl.searchParams.get('type')?.trim() || 'text';
+  if (!['text', 'voice'].includes(typeParam)) {
     return NextResponse.json({ error: 'Tipo de búsqueda inválido' }, { status: 400 });
   }
+  const searchType = typeParam as 'text' | 'voice';
   if (!q || q.length < 2) {
     return NextResponse.json({ error: 'Introduce al menos 2 caracteres' }, { status: 400 });
   }
+
+  // user_id SIEMPRE se resuelve server-side desde la sesión. Nunca del cliente.
+  let userId: string | null = null;
+  try {
+    const session = await getNartalisSession();
+    userId = session?.id ?? null;
+  } catch { /* sin sesión → búsqueda anónima */ }
 
   try {
     const res = await fetch(
@@ -114,7 +140,7 @@ export async function GET(request: NextRequest) {
       if (!exactMatch) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         const similar = isSimilar(q, correctedBase);
-        try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(correctedBase)}, ${searchType})`; } catch {}
+        try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true }); } catch {}
         for (const r of resultados) await upsertCache(r.nombre, r.registro);
         revalidatePath('/sitemap.xml');
         return NextResponse.json({
@@ -124,7 +150,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(q)}, ${searchType})`; } catch {}
+      try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true }); } catch {}
       for (const r of resultados) await upsertCache(r.nombre, r.registro);
       revalidatePath('/sitemap.xml');
       return NextResponse.json({ resultados, total: data.totalFilas || resultados.length });
@@ -145,7 +171,7 @@ export async function GET(request: NextRequest) {
         if (retryResultados.length > 0) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           if (!isSimilar(q, correctedBase)) break;
-          try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(correctedBase)}, ${searchType})`; } catch {}
+          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true }); } catch {}
           for (const r of retryResultados) await upsertCache(r.nombre, r.registro);
           revalidatePath('/sitemap.xml');
           return NextResponse.json({
@@ -182,7 +208,7 @@ export async function GET(request: NextRequest) {
                 const fuzzyData = await fuzzyRes.json();
                 const fuzzyResultados = mapResultados(fuzzyData);
                 if (fuzzyResultados.length > 0) {
-                  try { await sql`INSERT INTO farma_search_log (query, search_type) VALUES (${normalizeSearch(correctedBase)}, ${searchType})`; } catch {}
+          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true }); } catch {}
                   for (const r of fuzzyResultados) await upsertCache(r.nombre, r.registro);
                   revalidatePath('/sitemap.xml');
                   return NextResponse.json({
@@ -198,7 +224,8 @@ export async function GET(request: NextRequest) {
       } catch { /* fuzzy fallback no debe romper la búsqueda normal */ }
     }
 
-    // ─── Sin resultados en ningún intento — no se guarda en log ───
+    // ─── Sin resultados en ningún intento — se registra con result_count=0 ───
+    try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false }); } catch {}
     const msg = 'No encontramos "' + q + '" en la base de datos de medicamentos AEMPS. Este producto puede no ser un medicamento registrado en España. Prueba con otro nombre.';
     return NextResponse.json({ resultados: [], total: 0, message: msg });
   } catch {

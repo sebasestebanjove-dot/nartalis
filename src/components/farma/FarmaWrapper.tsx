@@ -131,6 +131,12 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
       if (data.suggestedCorrection) {
         setSuggestedCorrection(data.suggestedCorrection);
       }
+      // Analítica FASE 6/6A: evento de búsqueda completada (sin PII; la query no se envía).
+      track('search_completed', {
+        search_type: type || 'text',
+        result_count: (data.resultados || []).length,
+        was_successful: (data.resultados || []).length > 0,
+      });
     } catch {
       setResultados([]);
       setTotal(0);
