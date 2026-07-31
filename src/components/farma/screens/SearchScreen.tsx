@@ -421,7 +421,6 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
           <div style={styles.infoCardEmoji}>✨</div>
           <div style={styles.infoCardText}>
             <strong>Regístrate ahora <span style={{ fontSize: 18 }}>↗</span></strong>
-            <span style={styles.infoCardSub}>Prospectos oficiales AEMPS</span>
           </div>
         </div>
         <div style={styles.infoCard}>
