@@ -353,7 +353,7 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
       case 'connecting': return 'Preparando micrófono...';
       case 'blocked': return 'Haz clic en el candado 🔒 de la URL, permite el micrófono y recarga la página.';
       case 'error': return voiceError ? `Error detectado: ${voiceError}` : 'Búsqueda por voz no disponible temporalmente.';
-      default: return 'Escribe el nombre del medicamento o usa el micrófono para buscar.';
+      default: return 'Prospectos oficiales AEMPS. Descubre tu ecosistema completo tras registrarte.';
     }
   };
 
@@ -417,6 +417,13 @@ export default function SearchScreen({ onSearch, initialQuery = '' }: Props) {
       </div>
 
       <div style={styles.infoCards}>
+        <div style={{ ...styles.infoCard, background: 'linear-gradient(135deg, rgba(103,72,253,0.35), rgba(103,72,253,0.12))', border: '1px solid rgba(103,72,253,0.45)', cursor: 'default' }}>
+          <div style={styles.infoCardEmoji}>✨</div>
+          <div style={styles.infoCardText}>
+            <strong>Regístrate ahora <span style={{ fontSize: 18 }}>↗</span></strong>
+            <span style={styles.infoCardSub}>Prospectos oficiales AEMPS</span>
+          </div>
+        </div>
         <div style={styles.infoCard}>
           <div style={styles.infoCardEmoji}>💊</div>
           <div style={styles.infoCardText}>
