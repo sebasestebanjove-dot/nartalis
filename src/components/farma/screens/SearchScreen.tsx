@@ -82,6 +82,8 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   const onSearchRef = useRef(onSearch);
   const stopRequestedRef = useRef(false);
   const searchedThisCycleRef = useRef(false);
+  const transcriptRef = useRef('');
+  const voiceActiveRef = useRef(false);
   onSearchRef.current = onSearch;
 
   const doVoiceSearch = (transcript: string) => {
@@ -127,6 +129,8 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   const resetToIdle = () => {
     clearSafetyTimeout();
     resetRefs();
+    transcriptRef.current = '';
+    voiceActiveRef.current = false;
     setVoiceError('');
     setMicStatus('idle');
   };
@@ -210,7 +214,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   /* ── Pulsar / Mantener / Soltar ──
 
      startVoiceGrab (pointerdown): inicia captura → estado ROJO.
-     stopVoiceGrab (pointerup / pointercancel / pointerleave): detiene captura →
+     stopVoiceGrab (pointerup / pointercancel): detiene captura →
      la transcripción (fallback) o el onresult (SR) dispara la búsqueda
      automáticamente. Nunca 2 búsquedas: searchedThisCycleRef evita dup.
   */
@@ -237,20 +241,39 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       const stringsIdioma = [navigator.language, 'es-ES', 'es'];
       recognition.lang = stringsIdioma.find(lang => lang && lang.startsWith('es')) || 'es-ES';
       recognition.continuous = false;
-      recognition.interimResults = false;
+      // interimResults=true: acumulamos el habla en tránsito para no perder texto
+      // si el navegador no entrega un onresult final tras stop().
+      recognition.interimResults = true;
       if ('processLocally' in recognition) {
         (recognition as any).processLocally = true;
       }
 
       recognition.onstart = () => {
         startedRef.current = true;
+        voiceActiveRef.current = true;
+        transcriptRef.current = '';
+        searchedThisCycleRef.current = false;
+        clearSafetyTimeout();
         setMicStatus('listening');
       };
 
       recognition.onresult = (e: any) => {
-        const transcript = e.results[0][0].transcript;
-        setQuery(transcript);
-        doVoiceSearch(transcript);
+        let finalTr = '';
+        for (let i = 0; i < e.results.length; i++) {
+          const res = e.results[i];
+          const alt = res[0];
+          const piece = alt ? alt.transcript : '';
+          if (res.isFinal) {
+            finalTr = piece;
+          } else {
+            transcriptRef.current = piece;
+          }
+        }
+        const usable = finalTr || transcriptRef.current;
+        setQuery(usable);
+        if (finalTr && finalTr.trim().length >= 2) {
+          doVoiceSearch(finalTr);
+        }
       };
 
       recognition.onerror = (e: any) => {
@@ -259,6 +282,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
         if (e.error === 'language-not-supported' && !langRetriedRef.current) {
           langRetriedRef.current = true;
           recognition.lang = '';
+          clearSafetyTimeout();
           try { recognition.start(); return; } catch {}
         }
         didErrorRef.current = true;
@@ -272,18 +296,26 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
         }
         try { recognition.abort(); } catch {}
         startedRef.current = false;
+        voiceActiveRef.current = false;
       };
 
       recognition.onend = () => {
         clearSafetyTimeout();
+        startedRef.current = false;
+        voiceActiveRef.current = false;
         if (didErrorRef.current) {
+          transcriptRef.current = '';
           resetRefs();
+          setMicStatus('idle');
           return;
         }
-        if (!stopRequestedRef.current) {
-          resetToIdle();
-        } else {
-          resetToIdle();
+        // Respaldo: si el navegador no entregó un onresult final tras stop(),
+        // usamos el texto intermedio acumulado (si tiene >=2 chars y no se
+        // ha buscado ya). Así NUNCA se pierde una transcripción válida.
+        const pending = transcriptRef.current && transcriptRef.current.trim().length >= 2 && !searchedThisCycleRef.current;
+        resetToIdle();
+        if (pending) {
+          doVoiceSearch(transcriptRef.current);
         }
       };
 
@@ -316,12 +348,14 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
 
   const stopVoiceGrab = () => {
     stopRequestedRef.current = true;
+    // Detenemos la captura activa. El transcript (onresult final o acumulado)
+    // se dispara la búsqueda desde onend/onstop respectivamente.
     if (recognitionRef.current && micStatus === 'listening') {
       try { recognitionRef.current.stop(); } catch {}
     } else if (mediaRecorderRef.current && micStatus === 'recording') {
       try { mediaRecorderRef.current.stop(); } catch {}
     }
-   };
+  };
 
   const handleSearch = () => {
     const q = query.trim();
@@ -336,8 +370,8 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
 
   const getMicStyle = () => {
     switch (micStatus) {
-       case 'listening': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
-       case 'recording': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
+      case 'listening': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
+      case 'recording': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
       case 'connecting': return { borderColor: '#3B82F6', background: 'rgba(59,130,246,0.1)' };
       case 'blocked': return { borderColor: '#F97316', background: 'rgba(249,115,22,0.1)' };
       case 'error': return { borderColor: '#A1A1AA', background: 'rgba(161,161,170,0.08)' };
@@ -348,8 +382,8 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   const getMicIcon = () => {
     switch (micStatus) {
       case 'connecting': return <Loader2 size={28} className="farma-spin" color="#3B82F6" />;
-       case 'listening': return <MicOff size={28} color="#EF4444" />;
-       case 'recording': return <Loader2 size={28} className="farma-spin" color="#EF4444" />;
+      case 'listening': return <MicOff size={28} color="#EF4444" />;
+      case 'recording': return <Loader2 size={28} className="farma-spin" color="#EF4444" />;
       case 'blocked': return <AlertTriangle size={28} color="#F97316" />;
       case 'error': return <MicOff size={28} color="#A1A1AA" />;
       default: return <Mic size={28} />;
@@ -495,6 +529,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       </div>
 
       <style>{`
+        .farma-spin {
           animation: farmaSpin 1s linear infinite;
         }
         @keyframes farmaSpin {
@@ -509,7 +544,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
           .farma-search-box { padding: 1rem !important; }
         }
         .farma-account-link:hover {
-          background: rgba(103,72,253,0.32);
+          background: rgba(103,72,255,0.32);
           border-color: rgba(148,127,255,0.65);
         }
         .farma-account-link:focus-visible {
