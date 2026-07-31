@@ -273,6 +273,9 @@ export default function FarmaWrapper() {
           backdrop-filter: blur(14px);
           border: 1px solid rgba(255,255,255,0.07);
           max-height: 65vh;
+          overflow-y: auto;
+          overflow-x: hidden;
+          scrollbar-width: thin;
           position: sticky;
           top: 1rem;
         }
