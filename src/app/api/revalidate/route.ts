@@ -12,7 +12,13 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => ({}));
-  const { nregistro } = body as { nregistro?: string };
+  const { nregistro, revalidateAll } = body as { nregistro?: string; revalidateAll?: boolean };
+
+  if (revalidateAll) {
+    revalidatePath('/sitemap.xml');
+    revalidatePath('/medicamentos');
+    return NextResponse.json({ revalidated: true, scope: 'all' });
+  }
 
   if (!nregistro) {
     return NextResponse.json({ error: 'Falta nregistro' }, { status: 400 });
