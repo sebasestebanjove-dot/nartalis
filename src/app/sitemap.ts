@@ -7,6 +7,29 @@ export const revalidate = 3600;
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';
 
+const KNOWN_PRINCIPLES = [
+  'omeprazol', 'esomeprazol', 'paracetamol', 'ibuprofeno', 'aspirina',
+  'atorvastatina', 'simvastatina', 'metformina', 'enalapril', 'losartan',
+  'amlodipino', 'levotiroxina', 'pantoprazol', 'tramadol', 'diazepam',
+  'lorazepam', 'sertralina', 'fluoxetina', 'citalopram', 'gabapentina',
+  'pregabalina', 'tamsulosina', 'finasterida', 'salbutamol', 'budesonida',
+  'furosemida', 'hidroclorotiazida', 'bisoprolol', 'carvedilol', 'clopidogrel',
+  'acenocumarol', 'apixaban', 'rivaroxaban', 'dabigatran', 'edoxaban',
+  'insulina', 'sitagliptina', 'dapagliflozina', 'empagliflozina',
+  'ranitidina', 'cetirizina', 'loratadina', 'ebastina', 'dexketoprofeno',
+  'naproxeno', 'diclofenaco', 'celecoxib', 'etoricoxib', 'morfina',
+  'fentanilo', 'metadona', 'buprenorfina', 'lidocaina', 'ropivacaina',
+  'amoxicilina', 'azitromicina', 'ciprofloxacino', 'levofloxacino', 'claritromicina',
+  'doxiciclina', 'cotrimoxazol', 'aciclovir', 'valaciclovir', 'fluconazol',
+  'itraconazol', 'voriconazol', 'metronidazol', 'albendazol', 'mebendazol',
+  'ivermectina', 'hidroxicloroquina', 'cloroquina', 'prednisona', 'prednisolona',
+  'metilprednisolona', 'dexametasona', 'hidrocortisona', 'fluticasona',
+  'beclometasona', 'mometasona', 'triamcinolona', 'betametasona',
+  'colecalciferol', 'calcio', 'hierro', 'acido-folico', 'vitamina-b12',
+  'cobalamina', 'tiamina', 'piridoxina', 'acido-ascorbico', 'tocoferol',
+  'fitomenadiona', 'retinol', 'biotina', 'zinc', 'magnesio', 'potasio',
+];
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     {
@@ -64,7 +87,48 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     }));
 
-    return [...staticPages, ...letterPages, ...drugPages];
+    // ── Principios activos ──
+    const paPages: MetadataRoute.Sitemap = [
+      {
+        url: `${SITE_URL}/principios-activos`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly',
+        priority: 0.7,
+      },
+      ...KNOWN_PRINCIPLES.map(name => ({
+        url: `${SITE_URL}/principios-activos/${name}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.7,
+      })),
+    ];
+
+    // ── ATC pages ──
+    const atcL3 = await sql`SELECT DISTINCT code, COUNT(DISTINCT nregistro)::int AS c FROM atc_cache WHERE level = 3 GROUP BY code HAVING COUNT(DISTINCT nregistro) >= 1 ORDER BY code` as { code: string; c: number }[];
+    const atcL4 = await sql`SELECT DISTINCT code, COUNT(DISTINCT nregistro)::int AS c FROM atc_cache WHERE level = 4 GROUP BY code HAVING COUNT(DISTINCT nregistro) >= 5 ORDER BY code` as { code: string; c: number }[];
+
+    const atcPages: MetadataRoute.Sitemap = [
+      {
+        url: `${SITE_URL}/atc`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly',
+        priority: 0.7,
+      },
+      ...atcL3.map(r => ({
+        url: `${SITE_URL}/atc/${r.code}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.7,
+      })),
+      ...atcL4.map(r => ({
+        url: `${SITE_URL}/atc/${r.code}`,
+        lastModified: new Date(),
+        changeFrequency: 'weekly' as const,
+        priority: 0.7,
+      })),
+    ];
+
+    return [...staticPages, ...letterPages, ...drugPages, ...paPages, ...atcPages];
   } catch {
     return staticPages;
   }

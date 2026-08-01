@@ -60,6 +60,7 @@ const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | nul
       atcs: (raw.atcs || []).map((a: any) => ({
         codigo: a.codigo || '',
         nombre: a.nombre || '',
+        nivel: a.nivel,
       })),
       presentaciones: (raw.presentaciones || []).map((p: any) => ({
         nombre: p.nombre || '',
@@ -77,14 +78,100 @@ const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | nul
   }
 });
 
-async function getByRegistro(nregistro: string): Promise<Medicamento | null> {
+const fetchMedicamentoByNregistro = cache(async (nregistro: string): Promise<Medicamento | null> => {
   try {
-    const rows = (await sql`SELECT nombre FROM farma_name_cache WHERE nregistro = ${nregistro}`) as { nombre: string }[];
-    if (!rows.length) return null;
-    return fetchMedicamento(rows[0].nombre);
+    const res = await fetch(
+      `https://cima.aemps.es/cima/rest/medicamento?nregistro=${encodeURIComponent(nregistro)}`,
+      { next: { revalidate: 86400 }, signal: AbortSignal.timeout(15000) },
+    );
+    if (!res.ok) return null;
+    const raw = await res.json();
+    if (!raw.nombre) return null;
+    // Ingesta ATC best-effort (no bloquea el renderizado)
+    ingestAtcCache(raw, nregistro).catch(e => console.error('ATC ingest error:', e?.message || e));
+    return {
+      nombre: raw.nombre || '',
+      registro: raw.nregistro || '',
+      laboratorio: raw.labtitular || '',
+      laboratorioComercializador: raw.labcomercializador || '',
+      receta: raw.receta || false,
+      conduc: raw.conduc || false,
+      cpresc: raw.cpresc || '',
+      vias: (raw.viasAdministracion || []).map((v: any) => v.nombre),
+      imagenUrl: raw.fotos?.[0]?.url || null,
+      prospectoUrl: (raw.docs || []).find((d: any) => d.tipo === 2)?.url || null,
+      fichaTecnicaUrl: (raw.docs || []).find((d: any) => d.tipo === 1)?.url || null,
+      generico: raw.generico || false,
+      triangulo: raw.triangulo || false,
+      psum: raw.psum || false,
+      notas: raw.notas || false,
+      biosimilar: raw.biosimilar || false,
+      huerfano: raw.huerfano || false,
+      ema: raw.ema || false,
+      materialesInf: raw.materialesInf || false,
+      comerc: raw.comerc ?? true,
+      dosis: raw.dosis || null,
+      formaFarmaceutica: raw.formaFarmaceuticaSimplificada?.nombre || null,
+      pactivos: raw.pactivos || raw.vtm?.nombre || null,
+      principiosActivos: (raw.principiosActivos || []).map((p: any) => ({
+        nombre: p.nombre || '',
+        cantidad: p.cantidad || '',
+        unidad: p.unidad || '',
+      })),
+      excipientes: (raw.excipientes || []).map((e: any) => ({
+        nombre: e.nombre || '',
+        cantidad: e.cantidad || null,
+        unidad: e.unidad || null,
+      })),
+      atcs: (raw.atcs || []).map((a: any) => ({
+        codigo: a.codigo || '',
+        nombre: a.nombre || '',
+        nivel: a.nivel,
+      })),
+      presentaciones: (raw.presentaciones || []).map((p: any) => ({
+        nombre: p.nombre || '',
+        cn: p.cn || '',
+        comerc: p.comerc ?? true,
+        psum: p.psum || false,
+      })),
+      estado: raw.estado ? {
+        aut: raw.estado.fechaAut ?? null,
+        rev: raw.estado.fechaRev ?? null,
+      } : undefined,
+    };
   } catch {
     return null;
   }
+});
+
+// Persistencia ATC (niveles 3 y 4) — best-effort, fire-and-forget.
+// Se ejecuta como efecto secundario de la llamada CIMA individual.
+// NUNCA bloquea el renderizado de la ficha.
+// Nivel 5 NO se almacena (duplicaría /principios-activos).
+async function ingestAtcCache(raw: any, nregistro: string) {
+  const atcs = raw.atcs || [];
+  const level3s = atcs.filter((a: any) => a.nivel === 3);
+  const level4s = atcs.filter((a: any) => a.nivel === 4);
+
+  try {
+    for (const a of [...level3s, ...level4s]) {
+      const parent = a.nivel === 4
+        ? (level3s.find((l3: any) => a.codigo.startsWith(l3.codigo))?.codigo || null)
+        : null;
+      await sql`
+        INSERT INTO atc_cache (code, level, name, parent_code, nregistro)
+        VALUES (${a.codigo}, ${a.nivel}, ${a.nombre}, ${parent}, ${nregistro})
+        ON CONFLICT (code, nregistro) DO UPDATE SET
+          name = EXCLUDED.name,
+          parent_code = EXCLUDED.parent_code,
+          updated_at = NOW()
+      `;
+    }
+  } catch { /* best-effort: si falla, la ficha sigue funcionando */ }
+}
+
+async function getByRegistro(nregistro: string): Promise<Medicamento | null> {
+  return fetchMedicamentoByNregistro(nregistro);
 }
 
 function parseSlug(slug: string): { nregistro: string; namePart: string } {
@@ -166,10 +253,23 @@ export default async function ProspectoPage({ params }: Props) {
     description: `Información del medicamento ${m.nombre}. Datos oficiales AEMPS.`,
     url: `${SITE_URL}/prospectos/${canonicalSlug}`,
     manufacturer: m.laboratorio ? { '@type': 'Organization', name: m.laboratorio } : undefined,
-    activeIngredient: (m.principiosActivos?.length ? m.principiosActivos.map(p => p.nombre) : (principio ? [principio] : undefined)),
+    activeIngredient: m.principiosActivos?.length
+      ? m.principiosActivos.map(p => p.nombre)
+      : (principio ? [principio] : undefined),
     dosageForm: m.formaFarmaceutica || undefined,
     administrationRoute: m.vias.length > 0 ? { '@type': 'DrugRoute', name: m.vias.join(', ') } : undefined,
     prescriptionStatus: m.receta ? 'PrescriptionRequired' : 'OTC',
+    legalStatus: m.cpresc || undefined,
+    isAvailableGenerically: m.generico || undefined,
+    drugClass: m.atcs?.length ? {
+      '@type': 'DrugClass',
+      name: m.atcs[m.atcs.length - 1].nombre,
+      code: {
+        '@type': 'MedicalCode',
+        codeValue: m.atcs[m.atcs.length - 1].codigo,
+        codingSystem: 'ATC',
+      },
+    } : undefined,
     warning: m.conduc ? 'Puede afectar a la capacidad de conducir' : undefined,
     identifier: m.registro ? { '@type': 'PropertyValue', propertyID: 'AEMPS', value: m.registro } : undefined,
   };

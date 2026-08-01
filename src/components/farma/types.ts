@@ -38,7 +38,7 @@ export interface CimaExcipiente {
 export interface CimaAtc {
   codigo: string;
   nombre: string;
-  nivel: number;
+  nivel?: number;
 }
 
 export interface CimaPresentacion {

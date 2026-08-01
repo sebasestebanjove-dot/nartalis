@@ -152,14 +152,17 @@ export default function ProspectoView({ medicamento }: Props) {
       <div style={styles.detailBody}>
         {(m.pactivos || (m.principiosActivos && m.principiosActivos.length > 0)) && (
           <p style={{ fontSize: 14, color: '#9CA3AF', lineHeight: 1.6, marginBottom: '1rem' }}>
-            {m.nombre} es un medicamento cuyo principio activo es{' '}
-            <strong style={{ color: '#D1D5DB' }}>
-              {m.pactivos || m.principiosActivos?.map(p => p.nombre).join(', ') || 'no disponible'}
-            </strong>
-            {m.formaFarmaceutica && <>. Forma farmacéutica: {m.formaFarmaceutica.toLowerCase()}</>}
-            {m.vias.length > 0 && <>. Vía de administración: {m.vias.join(', ').toLowerCase()}</>}
+            {m.nombre} es un medicamento
+            {m.pactivos || ((m.principiosActivos?.length ?? 0) > 0) ? <>{' '}cuyo principio activo es{' '}
+              <strong style={{ color: '#D1D5DB' }}>
+                {m.pactivos || m.principiosActivos?.map(p => p.nombre).join(', ') || ''}
+              </strong></> : null}
+            {m.dosis && <>. Su dosis es <strong style={{ color: '#D1D5DB' }}>{m.dosis}</strong></>}
+            {m.formaFarmaceutica && <>. Forma farmacéutica: <strong style={{ color: '#D1D5DB' }}>{m.formaFarmaceutica.toLowerCase()}</strong></>}
+            {m.vias.length > 0 && <>. Vía de administración: <strong style={{ color: '#D1D5DB' }}>{m.vias.join(', ').toLowerCase()}</strong></>}
             {m.receta ? '. Requiere receta médica' : '. No requiere receta médica'}
-            {m.laboratorio && <>. Fabricado por {m.laboratorio}</>}
+            {m.generico && '. Es un medicamento genérico (EFG)'}
+            {m.laboratorio && <>. Comercializado por <strong style={{ color: '#D1D5DB' }}>{m.laboratorio}</strong></>}
             . Datos procedentes de la <strong style={{ color: '#D1D5DB' }}>AEMPS</strong> (CIMA).
           </p>
         )}
@@ -207,6 +210,12 @@ export default function ProspectoView({ medicamento }: Props) {
             <div style={styles.infoGridItem}>
               <div style={styles.infoGridLabel}>Principios activos</div>
               <div style={styles.infoGridValue}>{m.pactivos || `${paCount} principios`}</div>
+            </div>
+          )}
+          {m.atcs && m.atcs.length > 0 && (
+            <div style={styles.infoGridItem}>
+              <div style={styles.infoGridLabel}>Código ATC</div>
+              <div style={styles.infoGridValue}>{m.atcs[m.atcs.length - 1].codigo}</div>
             </div>
           )}
           {m.vias.length > 0 && (
@@ -279,12 +288,25 @@ export default function ProspectoView({ medicamento }: Props) {
               <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Clasificación ATC</h2>
             </div>
             <div style={styles.compactCard}>
-              {m.atcs.map((a, i) => (
+              {m.atcs.map((a, i) => {
+                const isLinkable = a.nivel === 3 || a.nivel === 4;
+                return (
                 <div key={i} style={{ marginBottom: i < m.atcs!.length - 1 ? '0.25rem' : 0 }}>
-                  <span style={styles.chipAtc}>{a.codigo}</span>
+                  {isLinkable ? (
+                    <Link
+                      href={`/atc/${a.codigo}`}
+                      style={{ ...styles.chipAtc, textDecoration: 'none', cursor: 'pointer' }}
+                      className="atc-link"
+                    >
+                      {a.codigo}
+                    </Link>
+                  ) : (
+                    <span style={styles.chipAtc}>{a.codigo}</span>
+                  )}
                   <span style={{ fontSize: 13, color: '#A1A1AA' }}>{a.nombre}</span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -336,6 +358,29 @@ export default function ProspectoView({ medicamento }: Props) {
           </div>
         )}
 
+        {m.laboratorio && (
+          <div style={{ ...styles.section, marginTop: '0.5rem' }}>
+            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Laboratorio</h2>
+            <div style={{ ...styles.compactCard, padding: '0.85rem 1rem' }}>
+              <p style={{ fontSize: 13, color: '#A1A1AA', marginBottom: '0.6rem', lineHeight: 1.5 }}>
+                Comercializado por <strong style={{ color: '#D1D5DB' }}>{m.laboratorio}</strong>.
+              </p>
+              <Link
+                href={`/laboratorios/${slugify(m.laboratorio)}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                  padding: '0.5rem 0.9rem', borderRadius: 8,
+                  background: 'rgba(103,72,253,0.12)', border: '1px solid rgba(103,72,253,0.25)',
+                  color: '#A78BFA', fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                }}
+                className="pa-link"
+              >
+                Ver medicamentos de {m.laboratorio} →
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div style={styles.actionRow}>
           {speaking ? (
             <button style={{ ...styles.actionBtn, ...styles.actionStop }} onClick={handleStop}>
@@ -367,6 +412,7 @@ export default function ProspectoView({ medicamento }: Props) {
           transform: translateX(-50%) translateY(0) !important;
         }
         .pa-link:hover { background: rgba(103,72,253,0.22) !important; color: #C4B5FD !important; }
+        .atc-link:hover { opacity: 0.8; }
       `}</style>
     </div>
   );
