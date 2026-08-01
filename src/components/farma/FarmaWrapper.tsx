@@ -266,6 +266,7 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
   }, []);
 
   const handleBackToSearch = useCallback(() => {
+    setQuery('');
     setView('search');
     setSelected(null);
     fetchStats();

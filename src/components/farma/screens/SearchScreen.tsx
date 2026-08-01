@@ -309,13 +309,14 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
           setMicStatus('idle');
           return;
         }
-        // Respaldo: si el navegador no entregó un onresult final tras stop(),
-        // usamos el texto intermedio acumulado (si tiene >=2 chars y no se
-        // ha buscado ya). Así NUNCA se pierde una transcripción válida.
-        const pending = transcriptRef.current && transcriptRef.current.trim().length >= 2 && !searchedThisCycleRef.current;
+        // Respaldo: si el navegador no entregó un onresult final tras stop(), usamos
+        // el texto intermedio acumulado. Se captura ANTES de resetToIdle (que limpia
+        // transcriptRef), para no perderlo y poder buscarlo.
+        const pendingText = (transcriptRef.current || '').trim();
+        const shouldSearch = pendingText.length >= 2 && !searchedThisCycleRef.current;
         resetToIdle();
-        if (pending) {
-          doVoiceSearch(transcriptRef.current);
+        if (shouldSearch) {
+          doVoiceSearch(pendingText);
         }
       };
 
@@ -408,7 +409,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       case 'connecting': return 'Preparando micrófono...';
       case 'blocked': return 'Haz clic en el candado 🔒 de la URL, permite el micrófono y recarga la página.';
       case 'error': return voiceError ? `Error detectado: ${voiceError}` : 'Búsqueda por voz no disponible temporalmente.';
-      default: return 'Pulsa y mantén el micrófono y habla el nombre del medicamento.';
+      default: return 'Mantén pulsado y di el nombre del medicamento. Suelta para buscar.';
     }
   };
 
