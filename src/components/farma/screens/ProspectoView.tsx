@@ -259,6 +259,70 @@ export default function ProspectoView({ medicamento }: Props) {
           <span>Esta plataforma es un buscador informativo basado en datos oficiales de la AEMPS y <strong>no sustituye</strong> el consejo, diagnóstico o tratamiento médico profesional.</span>
         </div>
 
+        {/* ── Q&A / AEO block ── */}
+        <div style={{ ...styles.section, marginTop: '0.25rem' }}>
+          <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Información del medicamento</h2>
+          <div style={{ ...styles.compactCard, padding: '0.85rem 1rem' }}>
+            {(m.pactivos || (m.principiosActivos && m.principiosActivos.length > 0)) && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Cuál es su principio activo?</strong>
+                <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>
+                  {m.pactivos || m.principiosActivos?.map(p => p.nombre).join(', ') || ''}
+                </div>
+              </div>
+            )}
+            {m.dosis && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Qué dosis tiene?</strong>
+                <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>{m.dosis}</div>
+              </div>
+            )}
+            {m.formaFarmaceutica && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Qué forma farmacéutica tiene?</strong>
+                <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>{m.formaFarmaceutica.toLowerCase()}</div>
+              </div>
+            )}
+            {m.vias.length > 0 && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Cómo se administra?</strong>
+                <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>{m.vias.join(', ').toLowerCase()}</div>
+              </div>
+            )}
+            <div style={{ marginBottom: '0.4rem' }}>
+              <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Requiere receta médica?</strong>
+              <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>{m.receta ? 'Sí, requiere receta médica' : 'No, venta sin receta'}</div>
+            </div>
+            {m.generico && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Es un medicamento genérico?</strong>
+                <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>Sí, es un medicamento genérico (EFG)</div>
+              </div>
+            )}
+            {m.atcs && m.atcs.length > 0 && (
+              <div style={{ marginBottom: '0.4rem' }}>
+                <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Cuál es su código ATC?</strong>
+                <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>
+                  {m.atcs[m.atcs.length - 1].codigo} — {m.atcs[m.atcs.length - 1].nombre}
+                </div>
+              </div>
+            )}
+            {m.laboratorio && (
+              <div style={{ marginBottom: '0.1rem' }}>
+                <strong style={{ fontSize: 13, color: '#A78BFA' }}>¿Quién lo comercializa?</strong>
+                <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: '0.15rem' }}>{m.laboratorio}</div>
+              </div>
+            )}
+            {(m.estado?.rev || m.estado?.aut) && (
+              <div style={{ marginTop: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid #3A3A3C', fontSize: 12, color: '#66748A' }}>
+                Datos de CIMA/AEMPS{'\u00A0'}
+                {m.estado.rev ? 'revisados' : 'registrados'} el{' '}
+                {formatDate(m.estado.rev || m.estado.aut!)}
+              </div>
+            )}
+          </div>
+        </div>
+
         {m.principiosActivos && m.principiosActivos.length > 0 && (
           <div style={styles.section}>
             <div style={styles.sectionHeader}>

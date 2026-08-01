@@ -37,11 +37,22 @@ export default async function FarmaPage() {
       'query-input': 'required name=search_term_string',
     },
   };
+  const orgLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Nartalis',
+    url: 'https://nartalis.com/',
+    description: 'Portal de consulta de información sobre medicamentos basado en datos oficiales de la AEMPS (CIMA).',
+  };
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(webSiteLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }}
       />
       <FarmaWrapper initialSessionUser={user ? toPublicUser(user) : null} />
     </>

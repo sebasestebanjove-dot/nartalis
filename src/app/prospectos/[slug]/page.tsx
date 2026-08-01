@@ -69,8 +69,8 @@ const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | nul
         psum: p.psum || false,
       })),
       estado: raw.estado ? {
-        aut: raw.estado.fechaAut ?? null,
-        rev: raw.estado.fechaRev ?? null,
+        aut: raw.estado.aut ?? null,
+        rev: raw.estado.rev ?? null,
       } : undefined,
     };
   } catch {
@@ -135,8 +135,8 @@ const fetchMedicamentoByNregistro = cache(async (nregistro: string): Promise<Med
         psum: p.psum || false,
       })),
       estado: raw.estado ? {
-        aut: raw.estado.fechaAut ?? null,
-        rev: raw.estado.fechaRev ?? null,
+        aut: raw.estado.aut ?? null,
+        rev: raw.estado.rev ?? null,
       } : undefined,
     };
   } catch {
@@ -285,11 +285,25 @@ export default async function ProspectoPage({ params }: Props) {
     ],
   };
 
+  // Fecha de revisión CIMA para dateModified (preferir rev, fallback a aut)
+  const cimaDate = m.estado?.rev || m.estado?.aut || null;
+  const dateModified = cimaDate ? new Date(cimaDate).toISOString() : undefined;
+
+  const webPageLd: Record<string, any> = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: m.nombre,
+    url: `${SITE_URL}/prospectos/${canonicalSlug}`,
+    description: `Información del medicamento ${m.nombre} basada en datos oficiales de la AEMPS (CIMA).`,
+    mainEntity: jsonLd,
+    ...(dateModified ? { dateModified } : {}),
+  };
+
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(webPageLd) }}
       />
       <script
         type="application/ld+json"
