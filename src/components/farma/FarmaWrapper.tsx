@@ -42,6 +42,7 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
 
   // ─── Auth modal state ────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
+  const [showLoginAuth, setShowLoginAuth] = useState(false);
 
   // ─── Sesión (se refresca tras login modal sin recargar) ──
   const [sessionUser, setSessionUser] = useState<PublicSessionUser | null>(initialSessionUser || null);
@@ -309,6 +310,7 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
               initialQuery={query}
               sessionUser={sessionUser}
               onPersonalSpaceCta={() => setShowAuth(true)}
+              onLoginCta={() => setShowLoginAuth(true)}
             />
           </div>
           {mounted && (
@@ -391,6 +393,13 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
         onSuccess={handleAuthSuccess}
       />
 
+      <AuthModal
+        initialMode="login"
+        open={showLoginAuth}
+        onClose={() => setShowLoginAuth(false)}
+        onSuccess={handleAuthSuccess}
+      />
+
       <style>{`
         @keyframes dermoFadeIn {
           from { opacity: 0; }
@@ -431,9 +440,9 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
           gap: 0.25rem;
           padding: 0.85rem;
           border-radius: 14px;
-          background: rgba(24,24,27,0.88);
+          background: rgba(8,28,53,0.92);
           backdrop-filter: blur(14px);
-          border: 1px solid rgba(255,255,255,0.07);
+          border: 1px solid rgba(255,255,255,0.08);
         }
         .farma-tip-text {
           animation: farmaFadeIn 0.4s ease-out;

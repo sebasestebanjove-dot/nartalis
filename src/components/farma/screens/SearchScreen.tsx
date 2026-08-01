@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import Link from 'next/link';
-import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, Volume2, ScanText, ArrowRight } from 'lucide-react';
-import { styles } from './styles';
+import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, HeartPulse, Users } from 'lucide-react';
 import PersonalSpaceCard from '../PersonalSpaceCard';
 import { track } from '@/lib/analytics';
 import type { PublicSessionUser } from '@/lib/auth';
@@ -11,6 +9,7 @@ import type { PublicSessionUser } from '@/lib/auth';
 interface Props {
   onSearch: (q: string, type?: 'text' | 'voice') => void;
   onPersonalSpaceCta?: () => void;
+  onLoginCta?: () => void;
   initialQuery?: string;
   sessionUser?: PublicSessionUser | null;
 }
@@ -60,14 +59,7 @@ type MicStatus = 'idle' | 'connecting' | 'listening' | 'recording' | 'blocked' |
 
 const VOICE_TIMEOUT_MS = 8000;
 
-function getFirstName(name?: string | null): string | null {
-  if (!name) return null;
-  const first = name.trim().split(/\s+/)[0];
-  if (!first) return null;
-  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
-}
-
-export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSpaceCta, sessionUser = null }: Props) {
+export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSpaceCta, onLoginCta, sessionUser = null }: Props) {
   const [query, setQuery] = useState(initialQuery);
   const [micStatus, setMicStatus] = useState<MicStatus>('idle');
   const [hasVoiceSupport, setHasVoiceSupport] = useState(false);
@@ -241,8 +233,6 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       const stringsIdioma = [navigator.language, 'es-ES', 'es'];
       recognition.lang = stringsIdioma.find(lang => lang && lang.startsWith('es')) || 'es-ES';
       recognition.continuous = false;
-      // interimResults=true: acumulamos el habla en tránsito para no perder texto
-      // si el navegador no entrega un onresult final tras stop().
       recognition.interimResults = true;
       if ('processLocally' in recognition) {
         (recognition as any).processLocally = true;
@@ -309,9 +299,6 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
           setMicStatus('idle');
           return;
         }
-        // Respaldo: si el navegador no entregó un onresult final tras stop(), usamos
-        // el texto intermedio acumulado. Se captura ANTES de resetToIdle (que limpia
-        // transcriptRef), para no perderlo y poder buscarlo.
         const pendingText = (transcriptRef.current || '').trim();
         const shouldSearch = pendingText.length >= 2 && !searchedThisCycleRef.current;
         resetToIdle();
@@ -349,8 +336,6 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
 
   const stopVoiceGrab = () => {
     stopRequestedRef.current = true;
-    // Detenemos la captura activa. El transcript (onresult final o acumulado)
-    // se dispara la búsqueda desde onend/onstop respectivamente.
     if (recognitionRef.current && micStatus === 'listening') {
       try { recognitionRef.current.stop(); } catch {}
     } else if (mediaRecorderRef.current && micStatus === 'recording') {
@@ -367,27 +352,14 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
     if (e.key === 'Enter') handleSearch();
   };
 
-  /* ── UI helpers ── */
-
-  const getMicStyle = () => {
-    switch (micStatus) {
-      case 'listening': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
-      case 'recording': return { borderColor: '#EF4444', background: 'rgba(239,68,68,0.1)' };
-      case 'connecting': return { borderColor: '#3B82F6', background: 'rgba(59,130,246,0.1)' };
-      case 'blocked': return { borderColor: '#F97316', background: 'rgba(249,115,22,0.1)' };
-      case 'error': return { borderColor: '#A1A1AA', background: 'rgba(161,161,170,0.08)' };
-      default: return {};
-    }
-  };
-
   const getMicIcon = () => {
     switch (micStatus) {
-      case 'connecting': return <Loader2 size={28} className="farma-spin" color="#3B82F6" />;
-      case 'listening': return <MicOff size={28} color="#EF4444" />;
-      case 'recording': return <Loader2 size={28} className="farma-spin" color="#EF4444" />;
-      case 'blocked': return <AlertTriangle size={28} color="#F97316" />;
-      case 'error': return <MicOff size={28} color="#A1A1AA" />;
-      default: return <Mic size={28} />;
+      case 'connecting': return <Loader2 size={20} className="farma-spin" color="#3B82F6" />;
+      case 'listening': return <MicOff size={20} color="#EF4444" />;
+      case 'recording': return <Loader2 size={20} className="farma-spin" color="#EF4444" />;
+      case 'blocked': return <AlertTriangle size={20} color="#F97316" />;
+      case 'error': return <MicOff size={20} color="#A1A1AA" />;
+      default: return <Mic size={20} />;
     }
   };
 
@@ -398,7 +370,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       case 'recording': return 'Escuchando...';
       case 'blocked': return 'Micrófono bloqueado';
       case 'error': return 'Voz no disponible';
-      default: return hasVoiceSupport ? 'Pulsa y mantén para hablar' : 'Voz no disponible';
+      default: return hasVoiceSupport ? 'Buscar por voz' : 'Voz no disponible';
     }
   };
 
@@ -407,60 +379,42 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       case 'listening': return 'Di el nombre del medicamento en voz alta...';
       case 'recording': return 'Habla ahora...';
       case 'connecting': return 'Preparando micrófono...';
-      case 'blocked': return 'Haz clic en el candado 🔒 de la URL, permite el micrófono y recarga la página.';
+      case 'blocked': return 'Permite el micrófono para buscar por voz.';
       case 'error': return voiceError ? `Error detectado: ${voiceError}` : 'Búsqueda por voz no disponible temporalmente.';
       default: return 'Mantén pulsado y di el nombre del medicamento. Suelta para buscar.';
     }
   };
 
-  const accountGreeting = (() => {
-    const displayName = getFirstName(sessionUser?.name);
-    return displayName ? `Hola, ${displayName}` : 'Mi cuenta';
-  })();
-
   return (
-    <div style={styles.container}>
-      <div style={styles.hero}>
-        <h1 style={styles.title}>Nartalis</h1>
-        <p style={styles.subtitle}>
-          Te ayuda a cuidar tu salud y la de los tuyos.
-        </p>
-        <p style={styles.claimSecondary}>
+    <div style={S.container}>
+      {/* ── Hero ── */}
+      <div style={S.hero}>
+        <span className="farma-hero-brand" style={S.brand}>Nartalis</span>
+        <h1 className="farma-hero-h1" style={S.h1}>Te ayuda a cuidar tu salud y la de los tuyos.</h1>
+        <p className="farma-hero-sub" style={S.subtitle}>
           Información oficial de medicamentos. Descubre todo lo que Nartalis puede hacer por ti.
         </p>
-        {sessionUser && (
-          <div style={styles.accountBar}>
-            <span style={styles.accountGreeting}>
-              {accountGreeting}
-            </span>
-            <Link
-              href="/espacio"
-              className="farma-account-link"
-              onClick={() => track('account_space_click')}
-              style={styles.accountLink}
-              aria-label="Mi espacio"
-            >
-              Mi espacio
-              <ArrowRight size={15} strokeWidth={2.5} aria-hidden="true" />
-            </Link>
-          </div>
-        )}
       </div>
 
-      <div className="farma-search-box" style={styles.searchBox}>
-        <div style={styles.inputRow}>
+      {/* ── Search Box ── */}
+      <div style={S.searchWrap}>
+        <div style={S.searchBox}>
+          <svg style={S.searchIcon} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
           <input
-            style={styles.input}
+            style={S.input}
             type="text"
-            placeholder="Nombre del medicamento..."
+            placeholder="Busca tu prospecto oficial..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             autoFocus
-            aria-label="Nombre del medicamento"
+            aria-label="Buscar medicamento"
           />
           <button
-            style={styles.searchBtn}
+            style={S.searchBtn}
             onClick={handleSearch}
             disabled={query.trim().length < 2}
             aria-label="Buscar"
@@ -468,66 +422,59 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
             <Search size={22} />
           </button>
         </div>
-
-        <div style={styles.separator}>o</div>
-
-        <button
-          onPointerDown={startVoiceGrab}
-          onPointerUp={stopVoiceGrab}
-          onPointerLeave={stopVoiceGrab}
-          onPointerCancel={stopVoiceGrab}
-          disabled={micStatus === 'connecting'}
-          aria-label={micStatus === 'listening' || micStatus === 'recording' ? 'Detener grabación' : 'Buscar por voz'}
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
-            width: '100%', minHeight: 56,
-            padding: '0.85rem', borderRadius: 14,
-            background: micStatus === 'idle' ? 'linear-gradient(135deg, #059669, #10B981)' : (micStatus === 'listening' || micStatus === 'recording' ? 'rgba(239,68,68,0.15)' : '#1C1C1E'),
-            border: micStatus === 'idle' ? 'none' : (micStatus === 'listening' || micStatus === 'recording' ? '2px solid #EF4444' : '2px solid #3A3A3C'),
-            color: micStatus === 'idle' ? '#fff' : (micStatus === 'listening' || micStatus === 'recording' ? '#EF4444' : '#34D399'),
-            fontSize: 20, fontWeight: 700, cursor: micStatus === 'connecting' ? 'default' : 'pointer',
-            fontFamily: 'inherit', transition: 'transform 0.15s, box-shadow 0.15s',
-            boxShadow: micStatus === 'idle' ? '0 4px 16px rgba(16,185,129,0.3)' : 'none',
-            animation: micStatus === 'idle' ? 'farmaMicPulse 2.5s ease-in-out infinite' : 'none',
-          }}
-        >
-          {getMicIcon()}
-          <span>{getMicLabel()}</span>
-        </button>
-
-        <p style={styles.hint}>{getMicHint()}</p>
       </div>
 
-      <div style={styles.infoCards}>
-        <PersonalSpaceCard onCta={onPersonalSpaceCta} sessionUser={sessionUser} />
-        <div style={styles.infoCard}>
-          <div style={styles.infoCardEmoji}>
-            <ShieldCheck size={26} strokeWidth={2} color="#60A5FA" aria-hidden="true" />
+      {/* ── Voice CTA ── */}
+      <button
+        onPointerDown={startVoiceGrab}
+        onPointerUp={stopVoiceGrab}
+        onPointerLeave={stopVoiceGrab}
+        onPointerCancel={stopVoiceGrab}
+        disabled={micStatus === 'connecting'}
+        aria-label={micStatus === 'listening' || micStatus === 'recording' ? 'Detener grabación' : 'Buscar por voz'}
+        style={{
+          ...S.voiceBtn,
+          borderColor: micStatus === 'listening' || micStatus === 'recording' ? '#EF4444' : 'transparent',
+          background: micStatus === 'idle' ? 'linear-gradient(135deg, #08A878, #0DBB91)' : (micStatus === 'listening' || micStatus === 'recording' ? 'rgba(239,68,68,0.15)' : '#0A2847'),
+          color: micStatus === 'idle' ? '#FFFFFF' : (micStatus === 'listening' || micStatus === 'recording' ? '#EF4444' : '#A78BFA'),
+          opacity: micStatus === 'connecting' ? 0.6 : 1,
+        }}
+      >
+        {getMicIcon()}
+        <span>{getMicLabel()}</span>
+      </button>
+
+      <p style={S.hint}>{getMicHint()}</p>
+
+      {/* ── Three Value Props ── */}
+      <div style={S.cardsRow}>
+        <div style={S.card}>
+          <div style={{ ...S.cardIcon, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)' }}>
+            <ShieldCheck size={22} strokeWidth={2} color="#60A5FA" />
           </div>
-          <div style={styles.infoCardText}>
-            <strong>Datos oficiales</strong>
-            <span style={styles.infoCardSub}>Información directamente de la AEMPS</span>
-          </div>
+          <strong style={S.cardTitle}>Información oficial</strong>
+          <span style={S.cardDesc}>Fuentes oficiales para consultar tus medicamentos.</span>
         </div>
-        <div style={styles.infoCard}>
-          <div style={styles.infoCardEmoji}>
-            <Volume2 size={26} strokeWidth={2} color="#34D399" aria-hidden="true" />
+
+        <div style={S.card}>
+          <div style={{ ...S.cardIcon, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.2)' }}>
+            <HeartPulse size={22} strokeWidth={2} color="#34D399" />
           </div>
-          <div style={styles.infoCardText}>
-            <strong>Lectura por voz</strong>
-            <span style={styles.infoCardSub}>Escucha la información del medicamento</span>
-          </div>
+          <strong style={S.cardTitle}>Cuidado personalizado</strong>
+          <span style={S.cardDesc}>Herramientas para cuidar mejor de ti.</span>
         </div>
-        <div style={styles.infoCard}>
-          <div style={styles.infoCardEmoji}>
-            <ScanText size={26} strokeWidth={2} color="#C084FC" aria-hidden="true" />
+
+        <div style={S.card}>
+          <div style={{ ...S.cardIcon, background: 'rgba(168,85,247,0.12)', border: '1px solid rgba(168,85,247,0.2)' }}>
+            <Users size={22} strokeWidth={2} color="#C084FC" />
           </div>
-          <div style={styles.infoCardText}>
-            <strong>Alta legibilidad</strong>
-            <span style={styles.infoCardSub}>Texto grande y de alto contraste</span>
-          </div>
+          <strong style={S.cardTitle}>Para toda la familia</strong>
+          <span style={S.cardDesc}>Cuida y organiza la información de toda tu familia.</span>
         </div>
       </div>
+
+      {/* ── Personal Space ── */}
+      <PersonalSpaceCard onCta={onPersonalSpaceCta} onLoginCta={onLoginCta} sessionUser={sessionUser} />
 
       <style>{`
         .farma-spin {
@@ -538,21 +485,172 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
           to { transform: rotate(360deg); }
         }
         @keyframes farmaMicPulse {
-          0%, 100% { box-shadow: 0 4px 16px rgba(16,185,129,0.3); }
-          50% { box-shadow: 0 4px 28px rgba(16,185,129,0.55); }
+          0%, 100% { box-shadow: 0 0 16px rgba(16,185,129,0.15); }
+          50% { box-shadow: 0 0 32px rgba(16,185,129,0.3); }
         }
         @media (max-width: 480px) {
           .farma-search-box { padding: 1rem !important; }
-        }
-        .farma-account-link:hover {
-          background: rgba(103,72,255,0.32);
-          border-color: rgba(148,127,255,0.65);
-        }
-        .farma-account-link:focus-visible {
-          outline: 2px solid #C4B5FD;
-          outline-offset: 2px;
+          .farma-hero-brand { font-size: 28px !important; }
+          .farma-hero-h1 { font-size: 30px !important; }
+          .farma-hero-sub { font-size: 16px !important; }
         }
       `}</style>
     </div>
   );
 }
+
+const S = {
+  container: {
+    minHeight: '100vh',
+    background: 'linear-gradient(180deg, #051230 0%, #092048 30%, #0C2C5E 55%, #0D3669 100%)',
+    color: '#FFFFFF',
+    padding: '3rem 1.25rem 4rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  },
+  hero: {
+    textAlign: 'center' as const,
+    maxWidth: 620,
+    marginBottom: '2.5rem',
+  },
+  brand: {
+    display: 'block',
+    fontSize: 34,
+    fontWeight: 800,
+    color: '#60A5FA',
+    marginBottom: '0.4rem',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase' as const,
+  },
+  h1: {
+    fontSize: 36,
+    fontWeight: 800,
+    color: '#FFFFFF',
+    margin: '0 0 1rem',
+    lineHeight: 1.2,
+    letterSpacing: '-0.02em',
+  },
+  subtitle: {
+    fontSize: 18,
+    color: '#93B4D0',
+    margin: 0,
+    lineHeight: 1.55,
+    maxWidth: 480,
+    marginLeft: 'auto',
+    marginRight: 'auto',
+  },
+  searchWrap: {
+    width: '100%',
+    maxWidth: 560,
+    marginBottom: '1rem',
+  },
+  searchBox: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    padding: '0.45rem',
+    borderRadius: 18,
+    background: '#FFFFFF',
+    border: '1px solid rgba(0,0,0,0.06)',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+  },
+  searchIcon: {
+    width: 22,
+    height: 22,
+    minWidth: 22,
+    marginLeft: '0.7rem',
+    flexShrink: 0,
+  },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 18,
+    padding: '0.8rem 0.3rem',
+    border: 'none',
+    background: 'transparent',
+    color: '#1E293B',
+    outline: 'none',
+    fontFamily: 'inherit',
+  },
+  searchBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 50,
+    minWidth: 50,
+    height: 50,
+    borderRadius: 14,
+    border: 'none',
+    background: 'linear-gradient(135deg, #0D7FAE, #0B9BC7)',
+    color: '#fff',
+    cursor: 'pointer',
+    flexShrink: 0,
+    marginRight: '0.3rem',
+  },
+  voiceBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.6rem',
+    width: '100%',
+    maxWidth: 560,
+    minHeight: 52,
+    padding: '0.75rem',
+    borderRadius: 16,
+    border: 'none',
+    fontSize: 17,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+    transition: 'border-color 0.15s, background 0.15s, color 0.15s',
+    marginBottom: '0.3rem',
+  },
+  hint: {
+    fontSize: 14,
+    color: '#7895B5',
+    textAlign: 'center' as const,
+    margin: '0.3rem 0 1.8rem',
+    maxWidth: 480,
+    lineHeight: 1.5,
+  },
+  cardsRow: {
+    width: '100%',
+    maxWidth: 560,
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+    gap: '0.8rem',
+    marginBottom: '1.2rem',
+  },
+  card: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start',
+    gap: '0.6rem',
+    padding: '1.25rem',
+    borderRadius: 16,
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    backdropFilter: 'blur(8px)',
+  },
+  cardIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  cardTitle: {
+    fontSize: 16,
+    color: '#F1F5F9',
+    fontWeight: 700,
+  },
+  cardDesc: {
+    fontSize: 13,
+    color: '#93B4D0',
+    lineHeight: 1.5,
+  },
+};

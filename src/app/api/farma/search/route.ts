@@ -72,6 +72,20 @@ async function upsertCache(nombre: string, nregistro: string) {
   } catch { /* silent */ }
 }
 
+// Versión batch: todas las filas en una sola sentencia SQL.
+// Elimina el N+1 secuencial que causaba 6–9s de overhead en búsquedas grandes.
+async function upsertCacheBatch(items: { nombre: string; registro: string }[]) {
+  if (items.length === 0) return;
+  const esc = (s: string) => "'" + (s || '').replace(/'/g, "''") + "'";
+  const values = items.map(r => `(${esc(r.nombre)}, ${esc(r.registro)})`).join(', ');
+  try {
+    await sql.unsafe(`
+      INSERT INTO farma_name_cache (nombre, nregistro) VALUES ${values}
+      ON CONFLICT (nregistro) DO UPDATE SET nombre = EXCLUDED.nombre, updated_at = NOW()
+    `);
+  } catch { /* silent */ }
+}
+
 function mapResultados(data: any) {
   return (data.resultados || []).map((r: any) => ({
     nombre: r.nombre || '',
@@ -141,7 +155,7 @@ export async function GET(request: NextRequest) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         const similar = isSimilar(q, correctedBase);
         try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true }); } catch {}
-        for (const r of resultados) await upsertCache(r.nombre, r.registro);
+        await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
         return NextResponse.json({
           resultados,
@@ -151,7 +165,7 @@ export async function GET(request: NextRequest) {
       }
 
       try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true }); } catch {}
-      for (const r of resultados) await upsertCache(r.nombre, r.registro);
+      await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
       revalidatePath('/sitemap.xml');
       return NextResponse.json({ resultados, total: data.totalFilas || resultados.length });
     }
@@ -172,7 +186,7 @@ export async function GET(request: NextRequest) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           if (!isSimilar(q, correctedBase)) break;
           try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true }); } catch {}
-          for (const r of retryResultados) await upsertCache(r.nombre, r.registro);
+          await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
           revalidatePath('/sitemap.xml');
           return NextResponse.json({
             resultados: retryResultados,
@@ -209,7 +223,7 @@ export async function GET(request: NextRequest) {
                 const fuzzyResultados = mapResultados(fuzzyData);
                 if (fuzzyResultados.length > 0) {
           try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true }); } catch {}
-                  for (const r of fuzzyResultados) await upsertCache(r.nombre, r.registro);
+                  await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
                   revalidatePath('/sitemap.xml');
                   return NextResponse.json({
                     resultados: fuzzyResultados,

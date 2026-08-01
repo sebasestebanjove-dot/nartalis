@@ -128,12 +128,12 @@ check('   botón "Cerrar sesión"', r.text.includes('Cerrar sesión'))
 
 // ═══ T17 / T18 — Home anónima vs autenticada (indicador de cuenta) ═══
 r = await req('/')
-check('T17 Home anónima: sin indicador de cuenta', !r.text.includes('>Mi espacio<') && !r.text.includes('Entrar en mi espacio') && !r.text.includes('Hola,'))
+check('T17 Home anónima: sin indicador de cuenta', !r.text.includes('>Mi espacio<') && !r.text.includes('Ir a mi espacio personal') && !r.text.includes('Hola,'))
 check('   Home anónima: CTA "Crear mi espacio gratis"', r.text.includes('Crear mi espacio gratis'))
 r = await req('/', withAuth())
-check('T18 Home con sesión: "Hola, Auditor"', r.text.includes('Hola, Auditor'))
-check('   CTA "Mi espacio" enlaza a /espacio', r.text.includes('href="/espacio"') && r.text.includes('>Mi espacio<'))
-check('   tarjeta CTA "Entrar en mi espacio"', r.text.includes('Entrar en mi espacio'))
+check('T18 Home con sesión: personal space CTA visible', r.text.includes('Tu espacio personal') && r.text.includes('Ir a mi espacio personal'))
+check('   CTA "Ir a mi espacio personal" enlaza a /espacio', r.text.includes('href="/espacio"') && r.text.includes('Ir a mi espacio personal'))
+check('   tarjeta CTA "Ir a mi espacio personal"', r.text.includes('Ir a mi espacio personal'))
 
 r = await req('/registro', withAuth())
 check('T11 GET /registro con sesión → 307 → /espacio', r.status === 307 && (r.res.headers.get('location') || '').includes('/espacio'))
@@ -203,7 +203,7 @@ check('   NO devuelve 501', r.status !== 501)
   const __dirname = dirname(fileURLToPath(import.meta.url))
   const flowSrc = readFileSync(join(__dirname, '..', 'src', 'components', 'auth', 'AuthFlow.tsx'), 'utf8')
   check('T21 analítica AuthFlow sin PII', !/(track\([^)]*\{\s*(?:email|name)\s*:)/.test(flowSrc))
-  const searchSrc = readFileSync(join(__dirname, '..', 'src', 'components', 'farma', 'screens', 'SearchScreen.tsx'), 'utf8')
+  const searchSrc = readFileSync(join(__dirname, '..', 'src', 'components', 'farma', 'PersonalSpaceCard.tsx'), 'utf8')
   check('   account_space_click sin PII', searchSrc.includes("track('account_space_click')") && !searchSrc.includes("track('account_space_click',"))
 }
 
@@ -246,18 +246,18 @@ check('Regresión /api/farma/stats → 200', r.status === 200)
   check('   registro usuario "SEBASTIAN ESTEBAN JOVE"', r.status === 200 && r.data?.ok === true)
 
   r = await req('/', withAuth())
-  check('TEST 6 "SEBASTIAN ESTEBAN JOVE" → "Hola, Sebastian"', r.text.includes('Hola, Sebastian'))
-  check('   saludo no muestra "Hola, SEBASTIAN"', !r.text.includes('Hola, SEBASTIAN'))
+  check('TEST 6 "SEBASTIAN ESTEBAN JOVE" → autenticado en home', r.text.includes('Tu espacio personal') && r.text.includes('Ir a mi espacio personal'))
+  check('   NO muestra gretting de "Hola, SEBASTIAN"', !r.text.includes('Hola, SEBASTIAN'))
 
   await sql`UPDATE nartalis_users SET name = 'Sebastián Esteban Jove' WHERE email = ${gEmail}`
   r = await req('/', withAuth())
-  check('TEST 7 "Sebastián Esteban Jove" → "Hola, Sebastián"', r.text.includes('Hola, Sebastián'))
-  check('   saludo no muestra el apellido', !r.text.includes('Hola, Sebastián Esteban'))
+  check('TEST 7 "Sebastián Esteban Jove" → autenticado en home', r.text.includes('Ir a mi espacio personal'))
+  check('   NO muestra "Hola, Sebastián" (saludo eliminado)', !r.text.includes('Hola, Sebastián'))
 
   await sql`UPDATE nartalis_users SET name = '' WHERE email = ${gEmail}`
   r = await req('/', withAuth())
-  check('TEST 8 nombre vacío → "Mi cuenta"', r.text.includes('Mi cuenta'))
-  check('   NO muestra "Hola, "', !r.text.includes('Hola,'))
+  check('TEST 8 nombre vacío → autenticado en home', r.text.includes('Tu espacio personal') && !r.text.includes('Hola,'))
+  check('   NO muestra "Mi cuenta" (saludo eliminado)', !r.text.includes('Mi cuenta'))
 }
 
 console.log(`\n${'─'.repeat(56)}`)
