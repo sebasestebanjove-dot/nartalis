@@ -46,7 +46,7 @@ const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | nul
       comerc: raw.comerc ?? true,
       dosis: raw.dosis || null,
       formaFarmaceutica: raw.formaFarmaceuticaSimplificada?.nombre || null,
-      pactivos: raw.pactivos || null,
+      pactivos: raw.pactivos || raw.vtm?.nombre || null,
       principiosActivos: (raw.principiosActivos || []).map((p: any) => ({
         nombre: p.nombre || '',
         cantidad: p.cantidad || '',

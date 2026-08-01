@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import {
   ArrowLeft, Volume2, Square, ExternalLink, Pill,
   AlertTriangle, Car, Dna, FlaskConical, Beaker,
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { Medicamento, CimaPrincipioActivo } from '../types';
 import { styles } from './styles';
+import { slugify } from '@/lib/slug';
 
 interface Props {
   medicamento: Medicamento;
@@ -307,6 +309,33 @@ export default function ProspectoView({ medicamento }: Props) {
           </div>
         )}
 
+        {(m.pactivos || (m.principiosActivos && m.principiosActivos.length > 0)) && (
+          <div style={{ ...styles.section, marginTop: '0.5rem' }}>
+            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Medicamentos con el mismo principio activo</h2>
+            <div style={{ ...styles.compactCard, padding: '0.85rem 1rem' }}>
+              <p style={{ fontSize: 13, color: '#A1A1AA', marginBottom: '0.6rem', lineHeight: 1.5 }}>
+                Este medicamento contiene{' '}
+                <strong style={{ color: '#D1D5DB' }}>
+                  {m.pactivos || m.principiosActivos?.map(p => p.nombre).join(', ') || ''}
+                </strong>{' '}
+                como principio activo.
+              </p>
+              <Link
+                href={`/principios-activos/${slugify(m.pactivos || m.principiosActivos?.[0]?.nombre || '')}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                  padding: '0.5rem 0.9rem', borderRadius: 8,
+                  background: 'rgba(103,72,253,0.12)', border: '1px solid rgba(103,72,253,0.25)',
+                  color: '#A78BFA', fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                }}
+                className="pa-link"
+              >
+                Ver medicamentos con {m.pactivos || m.principiosActivos?.[0]?.nombre || ''} →
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div style={styles.actionRow}>
           {speaking ? (
             <button style={{ ...styles.actionBtn, ...styles.actionStop }} onClick={handleStop}>
@@ -337,6 +366,7 @@ export default function ProspectoView({ medicamento }: Props) {
           visibility: visible !important;
           transform: translateX(-50%) translateY(0) !important;
         }
+        .pa-link:hover { background: rgba(103,72,253,0.22) !important; color: #C4B5FD !important; }
       `}</style>
     </div>
   );
