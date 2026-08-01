@@ -102,14 +102,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!m && namePart) m = await fetchMedicamento(namePart);
   if (!m) return { title: 'Medicamento no encontrado — Nartalis' };
 
-  const title = `${m.nombre} — Prospecto e información del medicamento | Nartalis`;
+  const title = `${m.nombre} — Prospecto | Nartalis`;
   const canonical = `${SITE_URL}/prospectos/${makeSlug(m.nombre, m.registro)}`;
+
+  const principio = m.pactivos || m.principiosActivos?.[0]?.nombre || null;
 
   const descParts: string[] = [];
   descParts.push(`Información de ${m.nombre}`);
-  if (m.pactivos) descParts.push(`principio activo: ${m.pactivos}`);
+  if (principio) descParts.push(`principio activo: ${principio}`);
   if (m.laboratorio) descParts.push(`laboratorio: ${m.laboratorio}`);
-  descParts.push('prospecto oficial y datos del medicamento basados en fuentes oficiales de la AEMPS.');
+  if (m.dosis) descParts.push(`dosis: ${m.dosis}`);
+  descParts.push('prospecto oficial y datos basados en fuentes de la AEMPS.');
   const description = descParts.join(', ');
 
   return {
@@ -154,6 +157,8 @@ export default async function ProspectoPage({ params }: Props) {
     permanentRedirect(`/prospectos/${canonicalSlug}`);
   }
 
+  const principio = m.pactivos || m.principiosActivos?.[0]?.nombre || null;
+
   const jsonLd: Record<string, any> = {
     '@context': 'https://schema.org',
     '@type': 'Drug',
@@ -161,7 +166,7 @@ export default async function ProspectoPage({ params }: Props) {
     description: `Información del medicamento ${m.nombre}. Datos oficiales AEMPS.`,
     url: `${SITE_URL}/prospectos/${canonicalSlug}`,
     manufacturer: m.laboratorio ? { '@type': 'Organization', name: m.laboratorio } : undefined,
-    activeIngredient: m.principiosActivos?.map(p => p.nombre) || undefined,
+    activeIngredient: (m.principiosActivos?.length ? m.principiosActivos.map(p => p.nombre) : (principio ? [principio] : undefined)),
     dosageForm: m.formaFarmaceutica || undefined,
     administrationRoute: m.vias.length > 0 ? { '@type': 'DrugRoute', name: m.vias.join(', ') } : undefined,
     prescriptionStatus: m.receta ? 'PrescriptionRequired' : 'OTC',

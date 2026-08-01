@@ -140,7 +140,7 @@ export default function ProspectoView({ medicamento }: Props) {
       <div style={styles.detailHeader}>
         <button style={styles.backBtn} onClick={() => window.history.back()} aria-label="Volver"><ArrowLeft size={24} /></button>
         <div style={{ flex: 1 }}>
-          <div style={styles.detailName}>{m.nombre}</div>
+          <h1 style={{ ...styles.detailName, margin: 0 }}>{m.nombre}</h1>
           <div style={styles.detailByline}>
             {[m.dosis, m.formaFarmaceutica].filter(Boolean).join(' · ')}
           </div>
@@ -148,6 +148,20 @@ export default function ProspectoView({ medicamento }: Props) {
       </div>
 
       <div style={styles.detailBody}>
+        {(m.pactivos || (m.principiosActivos && m.principiosActivos.length > 0)) && (
+          <p style={{ fontSize: 14, color: '#9CA3AF', lineHeight: 1.6, marginBottom: '1rem' }}>
+            {m.nombre} es un medicamento cuyo principio activo es{' '}
+            <strong style={{ color: '#D1D5DB' }}>
+              {m.pactivos || m.principiosActivos?.map(p => p.nombre).join(', ') || 'no disponible'}
+            </strong>
+            {m.formaFarmaceutica && <>. Forma farmacéutica: {m.formaFarmaceutica.toLowerCase()}</>}
+            {m.vias.length > 0 && <>. Vía de administración: {m.vias.join(', ').toLowerCase()}</>}
+            {m.receta ? '. Requiere receta médica' : '. No requiere receta médica'}
+            {m.laboratorio && <>. Fabricado por {m.laboratorio}</>}
+            . Datos procedentes de la <strong style={{ color: '#D1D5DB' }}>AEMPS</strong> (CIMA).
+          </p>
+        )}
+
         {m.imagenUrl && (
           <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
             <img src={m.imagenUrl} alt={m.nombre} style={styles.detailImg} />
@@ -237,7 +251,7 @@ export default function ProspectoView({ medicamento }: Props) {
         {m.principiosActivos && m.principiosActivos.length > 0 && (
           <div style={styles.section}>
             <div style={styles.sectionHeader}>
-              <div style={styles.sectionTitle}>Composición</div>
+              <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Composición</h2>
             </div>
             <div style={styles.compactCard}>
               <PrincipiosActivos items={m.principiosActivos} />
@@ -260,7 +274,7 @@ export default function ProspectoView({ medicamento }: Props) {
         {m.atcs && m.atcs.length > 0 && (
           <div style={styles.section}>
             <div style={styles.sectionHeader}>
-              <div style={styles.sectionTitle}>Clasificación ATC</div>
+              <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Clasificación ATC</h2>
             </div>
             <div style={styles.compactCard}>
               {m.atcs.map((a, i) => (
@@ -276,7 +290,7 @@ export default function ProspectoView({ medicamento }: Props) {
         {m.presentaciones && m.presentaciones.length > 0 && (
           <div style={styles.section}>
             <div style={styles.sectionHeader}>
-              <div style={styles.sectionTitle}>Presentaciones</div>
+              <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Presentaciones</h2>
             </div>
             <div style={styles.compactCard}>
               {m.presentaciones.map((p, i) => (
