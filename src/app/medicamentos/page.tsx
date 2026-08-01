@@ -5,9 +5,22 @@ import { makeSlug } from '@/lib/slug';
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: 'Medicamentos — Nartalis',
-  description: 'Listado completo de medicamentos disponibles en Nartalis. Consulta prospectos, fichas técnicas y datos oficiales de la AEMPS de todos los medicamentos autorizados en España.',
+  title: 'Medicamentos — Información y prospectos | Nartalis',
+  description: 'Busca medicamentos y consulta información oficial, principios activos, prospectos y datos de la AEMPS en Nartalis.',
   robots: { index: true, follow: true },
+  alternates: { canonical: 'https://nartalis.com/medicamentos' },
+  openGraph: {
+    title: 'Medicamentos — Información y prospectos | Nartalis',
+    description: 'Busca medicamentos y consulta información oficial, principios activos, prospectos y datos de la AEMPS en Nartalis.',
+    url: 'https://nartalis.com/medicamentos',
+    siteName: 'Nartalis',
+    locale: 'es_ES',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Medicamentos — Información y prospectos | Nartalis',
+    description: 'Busca medicamentos y consulta información oficial, principios activos, prospectos y datos de la AEMPS en Nartalis.',
+  },
 };
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';

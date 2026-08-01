@@ -5,6 +5,7 @@ import AuthPage from '@/components/auth/AuthPage';
 
 export const metadata: Metadata = {
   title: 'Inicia sesión — Nartalis',
+  robots: { index: false, follow: true },
 };
 
 export const dynamic = 'force-dynamic';

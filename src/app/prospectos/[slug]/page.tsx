@@ -1,5 +1,6 @@
 import { notFound, permanentRedirect } from 'next/navigation';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { cache } from 'react';
 import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
@@ -101,24 +102,34 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!m && namePart) m = await fetchMedicamento(namePart);
   if (!m) return { title: 'Medicamento no encontrado — Nartalis' };
 
-  const title = `${m.nombre}: Prospecto, dosis y usos | Nartalis`;
-  const description = `Información completa sobre ${m.nombre}.${m.dosis ? ` Dosis: ${m.dosis}.` : ''}${m.receta ? ' Requiere receta médica.' : ' Venta sin receta.'}${m.vias.length > 0 ? ` Vía: ${m.vias.join(', ')}.` : ''} Datos oficiales AEMPS.`;
+  const title = `${m.nombre} — Prospecto e información del medicamento | Nartalis`;
+  const canonical = `${SITE_URL}/prospectos/${makeSlug(m.nombre, m.registro)}`;
+
+  const descParts: string[] = [];
+  descParts.push(`Información de ${m.nombre}`);
+  if (m.pactivos) descParts.push(`principio activo: ${m.pactivos}`);
+  if (m.laboratorio) descParts.push(`laboratorio: ${m.laboratorio}`);
+  descParts.push('prospecto oficial y datos del medicamento basados en fuentes oficiales de la AEMPS.');
+  const description = descParts.join(', ');
 
   return {
     title,
     description,
+    robots: m.comerc === false ? { index: false, follow: true } : { index: true, follow: true },
+    alternates: { canonical },
     openGraph: {
+      type: 'website',
+      siteName: 'Nartalis',
+      locale: 'es_ES',
+      url: canonical,
       title,
       description,
-      type: 'article',
-      siteName: 'Nartalis',
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description,
     },
-    robots: m.comerc === false ? { index: false, follow: true } : { index: true, follow: true },
   };
 }
 
@@ -159,12 +170,35 @@ export default async function ProspectoPage({ params }: Props) {
   };
   Object.keys(jsonLd).forEach(k => { if (jsonLd[k] === undefined) delete jsonLd[k]; });
 
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Inicio', item: `${SITE_URL}/` },
+      { '@type': 'ListItem', position: 2, name: 'Medicamentos', item: `${SITE_URL}/medicamentos` },
+      { '@type': 'ListItem', position: 3, name: m.nombre },
+    ],
+  };
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
+      <div style={{ maxWidth: 720, margin: '0 auto', padding: '1rem 1.5rem 0', width: '100%' }}>
+        <nav aria-label="Breadcrumb" style={{ fontSize: 13, color: '#94A3B8', marginBottom: '0.5rem' }}>
+          <Link href="/" style={{ color: '#94A3B8', textDecoration: 'none' }}>Inicio</Link>
+          <span style={{ margin: '0 0.4rem' }}>/</span>
+          <Link href="/medicamentos" style={{ color: '#94A3B8', textDecoration: 'none' }}>Medicamentos</Link>
+          <span style={{ margin: '0 0.4rem' }}>/</span>
+          <span style={{ color: '#64748B' }}>{m.nombre}</span>
+        </nav>
+      </div>
       <ProspectoView medicamento={m} />
     </>
   );

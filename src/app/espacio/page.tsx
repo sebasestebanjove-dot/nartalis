@@ -9,6 +9,7 @@ import EspacioCleanUrl from '@/components/auth/EspacioCleanUrl';
 
 export const metadata: Metadata = {
   title: 'Tu espacio personal — Nartalis',
+  robots: { index: false, follow: true },
 };
 
 export const dynamic = 'force-dynamic';

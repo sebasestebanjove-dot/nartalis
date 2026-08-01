@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Aviso Legal — Nartalis',
   description: 'Aviso legal de Nartalis. Información sobre el titular del sitio web, propiedad intelectual y condiciones de uso.',
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: true },
 };
 
 const S = {

@@ -4,6 +4,15 @@ export const metadata: Metadata = {
   title: 'Preguntas Frecuentes — Nartalis',
   description: 'Respuestas a las preguntas más frecuentes sobre Nartalis: cómo funciona el buscador, qué datos mostramos, cómo se actualiza la información y más.',
   robots: { index: true, follow: true },
+  alternates: { canonical: 'https://nartalis.com/preguntas-frecuentes' },
+  openGraph: {
+    title: 'Preguntas Frecuentes — Nartalis',
+    description: 'Respuestas a las preguntas más frecuentes sobre Nartalis: cómo funciona el buscador, qué datos mostramos, cómo se actualiza la información y más.',
+    url: 'https://nartalis.com/preguntas-frecuentes',
+    siteName: 'Nartalis',
+    locale: 'es_ES',
+  },
+  twitter: { card: 'summary_large_image' },
 };
 
 const S = {

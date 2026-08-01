@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Política de Privacidad — Nartalis',
   description: 'Política de privacidad de Nartalis. Conoce cómo tratamos tus datos personales, qué información recopilamos y cuáles son tus derechos conforme al RGPD.',
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: true },
 };
 
 const S = {

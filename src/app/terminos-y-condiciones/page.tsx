@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Términos y Condiciones — Nartalis',
   description: 'Términos y condiciones de uso de Nartalis. Información sobre el servicio, limitaciones de responsabilidad y condiciones generales.',
-  robots: { index: true, follow: true },
+  robots: { index: false, follow: true },
 };
 
 const S = {

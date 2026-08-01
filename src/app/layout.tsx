@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nartalis — Te ayuda a cuidar tu salud y la de los tuyos",
-  description: "Nartalis te ayuda a cuidar tu salud y la de los tuyos.",
-  robots: { index: false, follow: true },
+  metadataBase: new URL('https://nartalis.com'),
+  title: "Nartalis — Información oficial de medicamentos | AEMPS",
+  description: "Consulta información oficial de medicamentos basada en datos de la AEMPS. Busca medicamentos, consulta prospectos y encuentra información clara y fiable en Nartalis.",
 };
 
 export default function RootLayout({
