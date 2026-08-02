@@ -1,11 +1,13 @@
 // Tests FASE 2.1 — Normalización de búsquedas (Top 5 más buscados)
-// Uso: node scripts/test-farma-stats.mjs [baseUrl]
+// Uso: node scripts/test-farma-stats.mjs [baseUrl] [--prod]
 import { neon } from '@neondatabase/serverless';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseBase, assertNotProd } from './guard-prod.mjs';
 
-const BASE = process.argv[2] || 'http://localhost:3000';
+const { base: BASE, prod: PROD } = parseBase();
+assertNotProd(BASE, PROD);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const envPath = join(__dirname, '..', '.env.local');

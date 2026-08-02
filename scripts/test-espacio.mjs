@@ -1,7 +1,9 @@
 // Auditoría funcional FASE 3 — Mi espacio personal Nartalis
-// Uso: node scripts/test-espacio.mjs [baseUrl]
+// Uso: node scripts/test-espacio.mjs [baseUrl] [--prod]
 // Requiere: servidor en marcha (npm run dev) y DATABASE_URL en .env.local
-const BASE = process.argv[2] || 'http://localhost:3000'
+import { parseBase, assertNotProd } from './guard-prod.mjs'
+const { base: BASE, prod: PROD } = parseBase()
+assertNotProd(BASE, PROD)
 
 let passed = 0
 let failed = 0

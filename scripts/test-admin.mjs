@@ -8,8 +8,10 @@ import { readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { parseBase, assertNotProd } from './guard-prod.mjs'
 
-const BASE = process.argv[2] || 'http://localhost:3000'
+const { base: BASE, prod: PROD } = parseBase()
+assertNotProd(BASE, PROD)
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const envPath = join(__dirname, '..', '.env.local')
@@ -324,21 +326,21 @@ await sql`DELETE FROM nartalis_users WHERE email LIKE 'admin.test.%@example.com'
 
 // ═══ T30 — Regresión test-auth ═══
 {
-  const p = spawnSync(process.execPath, [join(__dirname, 'test-auth.mjs'), BASE], { encoding: 'utf8', timeout: 120000 })
+  const p = spawnSync(process.execPath, [join(__dirname, 'test-auth.mjs'), BASE, ...(PROD ? ['--prod'] : [])], { encoding: 'utf8', timeout: 120000 })
   check('T30 regresión test-auth (exit 0)', p.status === 0, `(status=${p.status})`)
   if (p.status !== 0) console.log(p.stdout?.slice(-2000), p.stderr?.slice(-2000))
 }
 
 // ═══ T31 — Regresión test-espacio ═══
 {
-  const p = spawnSync(process.execPath, [join(__dirname, 'test-espacio.mjs'), BASE], { encoding: 'utf8', timeout: 120000 })
+  const p = spawnSync(process.execPath, [join(__dirname, 'test-espacio.mjs'), BASE, ...(PROD ? ['--prod'] : [])], { encoding: 'utf8', timeout: 120000 })
   check('T31 regresión test-espacio (exit 0)', p.status === 0, `(status=${p.status})`)
   if (p.status !== 0) console.log(p.stdout?.slice(-2000), p.stderr?.slice(-2000))
 }
 
 // ═══ T32 — Regresión test-farma-stats ═══
 {
-  const p = spawnSync(process.execPath, [join(__dirname, 'test-farma-stats.mjs'), BASE], { encoding: 'utf8', timeout: 120000 })
+  const p = spawnSync(process.execPath, [join(__dirname, 'test-farma-stats.mjs'), BASE, ...(PROD ? ['--prod'] : [])], { encoding: 'utf8', timeout: 120000 })
   check('T32 regresión test-farma-stats (exit 0)', p.status === 0, `(status=${p.status})`)
   if (p.status !== 0) console.log(p.stdout?.slice(-2000), p.stderr?.slice(-2000))
 }

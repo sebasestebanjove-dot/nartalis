@@ -1,6 +1,8 @@
 // Auditoría funcional FASE 2 — cuenta central Nartalis
-// Uso: node scripts/test-auth.mjs [baseUrl]
-const BASE = process.argv[2] || 'http://localhost:3000'
+// Uso: node scripts/test-auth.mjs [baseUrl] [--prod]
+import { parseBase, assertNotProd } from './guard-prod.mjs'
+const { base: BASE, prod: PROD } = parseBase()
+assertNotProd(BASE, PROD)
 
 let passed = 0
 let failed = 0
