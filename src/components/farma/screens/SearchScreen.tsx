@@ -446,6 +446,9 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
 
       <p style={S.hint}>{getMicHint()}</p>
 
+      {/* ── Personal Space ── */}
+      <PersonalSpaceCard onCta={onPersonalSpaceCta} onLoginCta={onLoginCta} sessionUser={sessionUser} />
+
       {/* ── Three Value Props ── */}
       <div style={S.cardsRow}>
         <div style={S.card}>
@@ -472,9 +475,6 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
           <span style={S.cardDesc}>Cuida y organiza la información de toda tu familia.</span>
         </div>
       </div>
-
-      {/* ── Personal Space ── */}
-      <PersonalSpaceCard onCta={onPersonalSpaceCta} onLoginCta={onLoginCta} sessionUser={sessionUser} />
 
       <style>{`
         .farma-spin {
