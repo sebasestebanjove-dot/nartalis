@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { sql } from '@/lib/db';
 import { catalogMetadata } from '@/lib/medicamentos';
 import { makeSlug } from '@/lib/slug';
 
@@ -60,8 +61,18 @@ export default async function PrincipioActivoPage({ params }: Props) {
   const { slug } = await params;
   const name = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-  const drugs = await fetchByPrincipio(name);
+  const drugs = await fetchByPrincipio(slug);
   if (drugs.length === 0) notFound();
+
+  // Buscar ATC asociados a medicamentos con este PA
+  let atcCodes: { code: string; level: number; name: string }[] = [];
+  try {
+    atcCodes = await sql`
+      SELECT DISTINCT code, level, name FROM atc_cache
+      WHERE nregistro IN (SELECT nregistro FROM pa_cache WHERE principio = ${slug})
+      AND level IN (3,4) ORDER BY level, code LIMIT 10
+    ` as { code: string; level: number; name: string }[];
+  } catch { /* best-effort */ }
 
   const breadcrumbLd = {
     '@context': 'https://schema.org',
@@ -92,8 +103,12 @@ export default async function PrincipioActivoPage({ params }: Props) {
       <p style={S.subtitle}>
         El principio activo <strong style={{ color: '#D1D5DB' }}>{name.toLowerCase()}</strong> está presente
         en <strong style={{ color: '#D1D5DB' }}>{drugs.length}</strong> medicamento{drugs.length !== 1 ? 's' : ''}
-        disponible{drugs.length !== 1 ? 's' : ''} en España. Consulta sus prospectos y accede a información
-        oficial basada en datos de la AEMPS (CIMA).
+        disponible{drugs.length !== 1 ? 's' : ''} en España.
+        {atcCodes.length > 0 && <> Pertenece al grupo ATC{' '}
+          {atcCodes.filter(a => a.level === 3).slice(0,1).map(a => (
+            <Link key={a.code} href={`/atc/${a.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>{a.code} — {a.name.toLowerCase()}</Link>
+          ))}
+        </>}. Consulta sus prospectos y accede a información oficial basada en datos de la AEMPS (CIMA).
       </p>
 
       <div style={S.grid}>
@@ -112,6 +127,21 @@ export default async function PrincipioActivoPage({ params }: Props) {
           </div>
         ))}
       </div>
+
+      {atcCodes.length > 0 && (
+        <div style={{ marginTop: '1rem' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#6748FD', borderBottom: '2px solid #6748FD', paddingBottom: '0.3rem', marginBottom: '0.5rem' }}>Clasificación ATC</div>
+          <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '0.35rem' }}>
+            {atcCodes.map(a => (
+              <Link key={a.code} href={`/atc/${a.code}`}
+                style={{ fontSize: 14, color: '#A78BFA', textDecoration: 'none', padding: '0.3rem 0' }}
+                className="pa-drug-link">
+                {a.code} — {a.name} {a.level === 3 ? '(grupo)' : '(subgrupo)'}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <style>{`
         .pa-drug-link:hover { color: #C4B5FD !important; }

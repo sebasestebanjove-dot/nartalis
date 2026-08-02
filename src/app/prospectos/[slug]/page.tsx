@@ -89,6 +89,7 @@ const fetchMedicamentoByNregistro = cache(async (nregistro: string): Promise<Med
     if (!raw.nombre) return null;
     // Ingesta ATC best-effort (no bloquea el renderizado)
     ingestAtcCache(raw, nregistro).catch(e => console.error('ATC ingest error:', e?.message || e));
+    ingestPaCache(raw, nregistro).catch(e => console.error('PA ingest error:', e?.message || e));
     return {
       nombre: raw.nombre || '',
       registro: raw.nregistro || '',
@@ -170,6 +171,19 @@ async function ingestAtcCache(raw: any, nregistro: string) {
   } catch { /* best-effort: si falla, la ficha sigue funcionando */ }
 }
 
+// Persistencia PA — mismo patrón que ATC: fire-and-forget, best-effort.
+async function ingestPaCache(raw: any, nregistro: string) {
+  const pa = raw.vtm?.nombre || raw.pactivos || null;
+  if (!pa) return;
+  try {
+    await sql`
+      INSERT INTO pa_cache (principio, nregistro)
+      VALUES (${pa.toLowerCase()}, ${nregistro})
+      ON CONFLICT (principio, nregistro) DO UPDATE SET updated_at = NOW()
+    `;
+  } catch { /* best-effort */ }
+}
+
 async function getByRegistro(nregistro: string): Promise<Medicamento | null> {
   return fetchMedicamentoByNregistro(nregistro);
 }
@@ -246,6 +260,29 @@ export default async function ProspectoPage({ params }: Props) {
 
   const principio = m.pactivos || m.principiosActivos?.[0]?.nombre || null;
 
+  // Cross-link queries: related drugs (same PA, same ATC L4). No N+1.
+  let relatedPa: { nombre: string; nregistro: string }[] = [];
+  let relatedAtc: { nombre: string; nregistro: string }[] = [];
+  const atcL4Code = m.atcs?.find(a => a.nivel === 4)?.codigo;
+  try {
+    if (principio) {
+      relatedPa = await sql`
+        SELECT DISTINCT fc.nombre, fc.nregistro
+        FROM pa_cache pa JOIN farma_name_cache fc ON pa.nregistro = fc.nregistro
+        WHERE pa.principio = ${principio.toLowerCase()} AND pa.nregistro != ${m.registro}
+        ORDER BY fc.nombre LIMIT 5
+      ` as { nombre: string; nregistro: string }[];
+    }
+    if (atcL4Code) {
+      relatedAtc = await sql`
+        SELECT DISTINCT fc.nombre, fc.nregistro
+        FROM atc_cache atc JOIN farma_name_cache fc ON atc.nregistro = fc.nregistro
+        WHERE atc.code = ${atcL4Code} AND atc.nregistro != ${m.registro}
+        ORDER BY fc.nombre LIMIT 5
+      ` as { nombre: string; nregistro: string }[];
+    }
+  } catch { /* best-effort */ }
+
   const jsonLd: Record<string, any> = {
     '@context': 'https://schema.org',
     '@type': 'Drug',
@@ -318,7 +355,7 @@ export default async function ProspectoPage({ params }: Props) {
           <span style={{ color: '#64748B' }}>{m.nombre}</span>
         </nav>
       </div>
-      <ProspectoView medicamento={m} />
+      <ProspectoView medicamento={m} relatedPa={relatedPa} relatedAtc={relatedAtc} />
     </>
   );
 }

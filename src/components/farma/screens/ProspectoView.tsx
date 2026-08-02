@@ -13,6 +13,8 @@ import { slugify } from '@/lib/slug';
 
 interface Props {
   medicamento: Medicamento;
+  relatedPa?: { nombre: string; nregistro: string }[];
+  relatedAtc?: { nombre: string; nregistro: string }[];
 }
 
 function formatDate(ts: number): string {
@@ -85,7 +87,7 @@ function PrincipiosActivos({ items }: { items: CimaPrincipioActivo[] }) {
   );
 }
 
-export default function ProspectoView({ medicamento }: Props) {
+export default function ProspectoView({ medicamento, relatedPa, relatedAtc }: Props) {
   const [speaking, setSpeaking] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
@@ -441,6 +443,32 @@ export default function ProspectoView({ medicamento }: Props) {
               >
                 Ver medicamentos de {m.laboratorio} →
               </Link>
+            </div>
+          </div>
+        )}
+
+        {(relatedPa && relatedPa.length > 0) && (
+          <div style={{ ...styles.section, marginTop: '0.5rem' }}>
+            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Otros medicamentos con el mismo principio activo</h2>
+            <div style={{ ...styles.compactCard, padding: '0.6rem 0.85rem' }}>
+              {relatedPa.map(r => (
+                <Link key={r.nregistro} href={`/prospectos/${slugify(r.nombre)}--${r.nregistro}`}
+                  style={{ display: 'block', padding: '0.2rem 0', fontSize: 13, color: '#A78BFA', textDecoration: 'none' }}
+                  className="pa-link">{r.nombre}</Link>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(relatedAtc && relatedAtc.length > 0) && (
+          <div style={{ ...styles.section, marginTop: '0.5rem' }}>
+            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Otros medicamentos del mismo grupo ATC</h2>
+            <div style={{ ...styles.compactCard, padding: '0.6rem 0.85rem' }}>
+              {relatedAtc.map(r => (
+                <Link key={r.nregistro} href={`/prospectos/${slugify(r.nombre)}--${r.nregistro}`}
+                  style={{ display: 'block', padding: '0.2rem 0', fontSize: 13, color: '#A78BFA', textDecoration: 'none' }}
+                  className="pa-link">{r.nombre}</Link>
+              ))}
             </div>
           </div>
         )}
