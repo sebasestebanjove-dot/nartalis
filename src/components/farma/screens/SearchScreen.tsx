@@ -621,6 +621,7 @@ const S = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
     gap: '0.8rem',
+    marginTop: '1.5rem',
     marginBottom: '1.2rem',
   },
   card: {
