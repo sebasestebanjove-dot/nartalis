@@ -35,7 +35,7 @@ const norm = (s) => String(s).trim().toLowerCase()
 function makeClient() {
   const jar = new Map()
   async function req(path, opts = {}) {
-    const headers = { ...(opts.headers || {}) }
+    const headers = { ...(opts.headers || {}), 'x-nartalis-test': '1' }
     if (opts.json !== undefined) {
       headers['Content-Type'] = 'application/json'
       opts = { ...opts, body: JSON.stringify(opts.json) }

@@ -50,11 +50,12 @@ async function logSearch(opts: {
   userId: string | null;
   resultCount: number;
   wasSuccessful: boolean;
+  isTest?: boolean;
 }) {
   try {
     await sql`
-      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful)
-      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful})
+      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test)
+      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false})
     `;
   } catch { /* el logging nunca debe romper la búsqueda */ }
 }
@@ -132,6 +133,9 @@ export async function GET(request: NextRequest) {
     userId = session?.id ?? null;
   } catch { /* sin sesión → búsqueda anónima */ }
 
+  // is_test: solo se activa con header X-Nartalis-Test:1 en entornos NO producción.
+  const isTest = process.env.VERCEL_ENV !== 'production' && request.headers.get('x-nartalis-test') === '1';
+
   try {
     const res = await fetch(
       `https://cima.aemps.es/cima/rest/medicamentos?nombre=${encodeURIComponent(q)}`,
@@ -154,7 +158,7 @@ export async function GET(request: NextRequest) {
       if (!exactMatch) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         const similar = isSimilar(q, correctedBase);
-        try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true }); } catch {}
+        try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
         return NextResponse.json({
@@ -164,7 +168,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true }); } catch {}
+      try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
       await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
       revalidatePath('/sitemap.xml');
       return NextResponse.json({ resultados, total: data.totalFilas || resultados.length });
@@ -185,7 +189,7 @@ export async function GET(request: NextRequest) {
         if (retryResultados.length > 0) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           if (!isSimilar(q, correctedBase)) break;
-          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true }); } catch {}
+          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest }); } catch {}
           await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
           revalidatePath('/sitemap.xml');
           return NextResponse.json({
@@ -222,7 +226,7 @@ export async function GET(request: NextRequest) {
                 const fuzzyData = await fuzzyRes.json();
                 const fuzzyResultados = mapResultados(fuzzyData);
                 if (fuzzyResultados.length > 0) {
-          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true }); } catch {}
+          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest }); } catch {}
                   await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
                   revalidatePath('/sitemap.xml');
                   return NextResponse.json({
@@ -239,7 +243,7 @@ export async function GET(request: NextRequest) {
     }
 
     // ─── Sin resultados en ningún intento — se registra con result_count=0 ───
-    try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false }); } catch {}
+    try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false, isTest }); } catch {}
     const msg = 'No encontramos "' + q + '" en la base de datos de medicamentos AEMPS. Este producto puede no ser un medicamento registrado en España. Prueba con otro nombre.';
     return NextResponse.json({ resultados: [], total: 0, message: msg });
   } catch {

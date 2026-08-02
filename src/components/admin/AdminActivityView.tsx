@@ -12,6 +12,7 @@ interface ActivityData {
     created_at: string
     user_id: string | null
     user_email: string | null
+    is_test?: boolean
   }[]
   recentRegistrations: {
     id: string
@@ -71,7 +72,19 @@ export default function AdminActivityView() {
                 {data.recentSearches.map((s, i) => (
                   <tr key={`${s.created_at}-${i}`}>
                     <td style={adminS.td}>{fmt(s.created_at)}</td>
-                    <td style={adminS.td}>{s.query || '—'}</td>
+                    <td style={adminS.td}>{s.query || '—'}
+                      {s.is_test && (
+                        <span style={{
+                          ...adminS.badge,
+                          background: 'rgba(245,158,11,0.15)',
+                          border: '1px solid rgba(245,158,11,0.35)',
+                          color: '#F59E0B',
+                          marginLeft: '0.4rem',
+                          fontSize: 10,
+                          padding: '0.1rem 0.4rem',
+                        }}>TEST</span>
+                      )}
+                    </td>
                     <td style={adminS.td}>
                       <span style={{ ...adminS.badge, ...(s.search_type === 'voice' ? adminS.badgeGreen : adminS.badgeBlue) }}>
                         {s.search_type}

@@ -88,7 +88,7 @@ const allCanonical = top.every((t) => t.q === titleCase(norm(t.q)));
 check('Etiqueta titleCase en todos los elementos del Top', allCanonical, `(top=${JSON.stringify(top)})`);
 
 // ── TEST 5 — la búsqueda farmacológica sigue funcionando y el log se normaliza ──
-const s = await fetch(`${BASE}/api/farma/search?q=paracetamol`);
+const s = await fetch(`${BASE}/api/farma/search?q=paracetamol`, { headers: { 'x-nartalis-test': '1' } });
 const sd = await s.json();
 check('TEST 5 búsqueda farmacológica responde 200', s.status === 200, `(status=${s.status})`);
 check('TEST 5 devuelve resultados', Array.isArray(sd.resultados) && sd.resultados.length > 0, `(resultados=${sd.resultados?.length})`);

@@ -13,7 +13,7 @@ export async function GET() {
   try {
     const recentSearches = await sql`
       SELECT s.query, s.search_type, s.result_count, s.was_successful, s.created_at, s.user_id,
-             u.email AS user_email
+             s.is_test, u.email AS user_email
       FROM farma_search_log s
       LEFT JOIN nartalis_users u ON u.id = s.user_id
       ORDER BY s.created_at DESC
