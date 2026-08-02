@@ -8,6 +8,7 @@ import {
   TriangleAlert, Baby, FileWarning, Info,
 } from 'lucide-react';
 import type { Medicamento, CimaPrincipioActivo } from '../types';
+import SaveMedButton from '../SaveMedButton';
 import { styles } from './styles';
 import { slugify } from '@/lib/slug';
 
@@ -15,6 +16,9 @@ interface Props {
   medicamento: Medicamento;
   relatedPa?: { nombre: string; nregistro: string }[];
   relatedAtc?: { nombre: string; nregistro: string }[];
+  initialSessionUser?: { id: string; name: string; email: string; plan: string; role: string } | null;
+  initialIsSaved?: boolean;
+  initialIsFavorite?: boolean;
 }
 
 function formatDate(ts: number): string {
@@ -87,7 +91,7 @@ function PrincipiosActivos({ items }: { items: CimaPrincipioActivo[] }) {
   );
 }
 
-export default function ProspectoView({ medicamento, relatedPa, relatedAtc }: Props) {
+export default function ProspectoView({ medicamento, relatedPa, relatedAtc, initialSessionUser, initialIsSaved = false, initialIsFavorite = false }: Props) {
   const [speaking, setSpeaking] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
@@ -260,6 +264,15 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc }: Pr
           <Info size={14} style={{ flexShrink: 0, marginTop: 2, color: '#FBBF24' }} />
           <span>Esta plataforma es un buscador informativo basado en datos oficiales de la AEMPS y <strong>no sustituye</strong> el consejo, diagnóstico o tratamiento médico profesional.</span>
         </div>
+
+        {/* Guardar en mi espacio */}
+        <SaveMedButton
+          nregistro={m.registro}
+          nombre={m.nombre}
+          initialSessionUser={initialSessionUser ?? null}
+          initialIsSaved={initialIsSaved}
+          initialIsFavorite={initialIsFavorite}
+        />
 
         {/* ── Q&A / AEO block ── */}
         <div style={{ ...styles.section, marginTop: '0.25rem' }}>

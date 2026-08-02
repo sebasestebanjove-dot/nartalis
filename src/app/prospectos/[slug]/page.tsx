@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { cache } from 'react';
 import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
+import { getNartalisSession, toPublicUser } from '@/lib/auth';
 import ProspectoView from '@/components/farma/screens/ProspectoView';
 import type { Medicamento } from '@/components/farma/types';
 
@@ -283,6 +284,24 @@ export default async function ProspectoPage({ params }: Props) {
     }
   } catch { /* best-effort */ }
 
+  const session = await getNartalisSession()
+  const sessionUser = session ? toPublicUser(session) : null
+  let isSaved = false
+  let isFavorite = false
+  if (sessionUser) {
+    try {
+      const rows = await sql`
+        SELECT is_favorite FROM nartalis_user_medicamentos
+        WHERE user_id = ${sessionUser.id} AND nregistro = ${m.registro}
+        LIMIT 1
+      `
+      if (rows.length > 0) {
+        isSaved = true
+        isFavorite = rows[0].is_favorite ?? false
+      }
+    } catch { /* best-effort, no bloquea el renderizado */ }
+  }
+
   const jsonLd: Record<string, any> = {
     '@context': 'https://schema.org',
     '@type': 'Drug',
@@ -355,7 +374,7 @@ export default async function ProspectoPage({ params }: Props) {
           <span style={{ color: '#64748B' }}>{m.nombre}</span>
         </nav>
       </div>
-      <ProspectoView medicamento={m} relatedPa={relatedPa} relatedAtc={relatedAtc} />
+      <ProspectoView medicamento={m} relatedPa={relatedPa} relatedAtc={relatedAtc} initialSessionUser={sessionUser} initialIsSaved={isSaved} initialIsFavorite={isFavorite} />
     </>
   );
 }
