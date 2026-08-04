@@ -41,91 +41,87 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  try {
-    // ── Letter pages ──
-    const letters = await getAllLetters();
-    const letterPages: MetadataRoute.Sitemap = [];
-    for (const l of letters) {
+// ── Letter pages ──
+  const letters = await getAllLetters();
+  const letterPages: MetadataRoute.Sitemap = [];
+  for (const l of letters) {
+    letterPages.push({
+      url: `${SITE_URL}/medicamentos/${l.letter.toLowerCase()}`,
+      lastModified: new Date(),
+      changeFrequency: 'daily',
+      priority: 0.8,
+    });
+    // Paginated pages for letters with >200 drugs
+    for (let p = 2; p <= l.pages; p++) {
       letterPages.push({
-        url: `${SITE_URL}/medicamentos/${l.letter.toLowerCase()}`,
+        url: `${SITE_URL}/medicamentos/${l.letter.toLowerCase()}/${p}`,
         lastModified: new Date(),
         changeFrequency: 'daily',
-        priority: 0.8,
+        priority: 0.6,
       });
-      // Paginated pages for letters with >200 drugs
-      for (let p = 2; p <= l.pages; p++) {
-        letterPages.push({
-          url: `${SITE_URL}/medicamentos/${l.letter.toLowerCase()}/${p}`,
-          lastModified: new Date(),
-          changeFrequency: 'daily',
-          priority: 0.6,
-        });
-      }
     }
+  }
 
-    // ── Prospectos (sin el filtro IP* que excluía fármacos reales) ──
-    const rows = await sql`
-      SELECT nombre, nregistro FROM farma_name_cache
-      WHERE updated_at IS NOT NULL
-    ` as { nombre: string; nregistro: string }[];
+  // ── Prospectos (sin el filtro IP* que excluía fármacos reales) ──
+  const rows = await sql`
+    SELECT nombre, nregistro FROM farma_name_cache
+    WHERE updated_at IS NOT NULL
+  ` as { nombre: string; nregistro: string }[];
 
-    const drugPages: MetadataRoute.Sitemap = rows.map(row => ({
-      url: `${SITE_URL}/prospectos/${makeSlug(row.nombre, row.nregistro)}`,
+  const drugPages: MetadataRoute.Sitemap = rows.map(row => ({
+    url: `${SITE_URL}/prospectos/${makeSlug(row.nombre, row.nregistro)}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.8,
+  }));
+
+  // ── Principios activos (fuente: farma_principles) ──
+  const paRows = await sql`
+    SELECT slug
+    FROM farma_principles
+    WHERE tipo = 'simple'
+      AND active = true
+      AND medicine_count >= 3
+    ORDER BY slug
+  ` as { slug: string }[];
+
+  const paPages: MetadataRoute.Sitemap = [
+    {
+      url: `${SITE_URL}/principios-activos`,
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    },
+    ...paRows.map(r => ({
+      url: `${SITE_URL}/principios-activos/${r.slug}`,
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    })),
+  ];
+
+  // ── ATC pages ──
+  const atcL3 = await sql`SELECT DISTINCT code, COUNT(DISTINCT nregistro)::int AS c FROM atc_cache WHERE level = 3 GROUP BY code HAVING COUNT(DISTINCT nregistro) >= 1 ORDER BY code` as { code: string; c: number }[];
+  const atcL4 = await sql`SELECT DISTINCT code, COUNT(DISTINCT nregistro)::int AS c FROM atc_cache WHERE level = 4 GROUP BY code HAVING COUNT(DISTINCT nregistro) >= 5 ORDER BY code` as { code: string; c: number }[];
+
+  const atcPages: MetadataRoute.Sitemap = [
+    {
+      url: `${SITE_URL}/atc`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.7,
+    },
+    ...atcL3.map(r => ({
+      url: `${SITE_URL}/atc/${r.code}`,
       lastModified: new Date(),
       changeFrequency: 'weekly' as const,
-      priority: 0.8,
-    }));
+      priority: 0.7,
+    })),
+    ...atcL4.map(r => ({
+      url: `${SITE_URL}/atc/${r.code}`,
+      lastModified: new Date(),
+      changeFrequency: 'weekly' as const,
+      priority: 0.7,
+    })),
+  ];
 
-    // ── Principios activos (fuente: farma_principles) ──
-    const paRows = await sql`
-      SELECT slug
-      FROM farma_principles
-      WHERE tipo = 'simple'
-        AND active = true
-        AND medicine_count >= 3
-      ORDER BY slug
-    ` as { slug: string }[];
-
-    const paPages: MetadataRoute.Sitemap = [
-      {
-        url: `${SITE_URL}/principios-activos`,
-        changeFrequency: 'weekly',
-        priority: 0.7,
-      },
-      ...paRows.map(r => ({
-        url: `${SITE_URL}/principios-activos/${r.slug}`,
-        changeFrequency: 'weekly' as const,
-        priority: 0.7,
-      })),
-    ];
-
-    // ── ATC pages ──
-    const atcL3 = await sql`SELECT DISTINCT code, COUNT(DISTINCT nregistro)::int AS c FROM atc_cache WHERE level = 3 GROUP BY code HAVING COUNT(DISTINCT nregistro) >= 1 ORDER BY code` as { code: string; c: number }[];
-    const atcL4 = await sql`SELECT DISTINCT code, COUNT(DISTINCT nregistro)::int AS c FROM atc_cache WHERE level = 4 GROUP BY code HAVING COUNT(DISTINCT nregistro) >= 5 ORDER BY code` as { code: string; c: number }[];
-
-    const atcPages: MetadataRoute.Sitemap = [
-      {
-        url: `${SITE_URL}/atc`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly',
-        priority: 0.7,
-      },
-      ...atcL3.map(r => ({
-        url: `${SITE_URL}/atc/${r.code}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly' as const,
-        priority: 0.7,
-      })),
-      ...atcL4.map(r => ({
-        url: `${SITE_URL}/atc/${r.code}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly' as const,
-        priority: 0.7,
-      })),
-    ];
-
-    return [...staticPages, ...letterPages, ...drugPages, ...paPages, ...atcPages];
-  } catch {
-    return staticPages;
-  }
+  return [...staticPages, ...letterPages, ...drugPages, ...paPages, ...atcPages];
 }
