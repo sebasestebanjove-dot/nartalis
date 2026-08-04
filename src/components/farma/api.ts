@@ -1,6 +1,17 @@
 import type { Medicamento } from './types';
 
-export async function buscarMedicamento(q: string, type: 'text' | 'voice' = 'text'): Promise<{ resultados: Medicamento[]; total: number; suggestedCorrection?: string; message?: string }> {
+export interface FarmaSearchResult {
+  resultados: Medicamento[];
+  total: number;
+  suggestedCorrection?: string;
+  message?: string;
+  // Campos adicionales (no rompen el contrato previo): indican que la
+  // respuesta se sirvió desde la caché local ante un fallo de CIMA.
+  fallback?: boolean;
+  fallbackReason?: 'cima_http_5xx' | 'timeout' | 'cima_unreachable' | null;
+}
+
+export async function buscarMedicamento(q: string, type: 'text' | 'voice' = 'text'): Promise<FarmaSearchResult> {
   const res = await fetch(`/api/farma/search?q=${encodeURIComponent(q)}&type=${type}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Error de conexión' }));

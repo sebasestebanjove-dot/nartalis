@@ -39,6 +39,8 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
   const [selected, setSelected] = useState<Medicamento | null>(null);
   const [suggestedCorrection, setSuggestedCorrection] = useState<string | undefined>(undefined);
   const [message, setMessage] = useState<string | undefined>(undefined);
+  // Banner de modo respaldo: solo se muestra cuando la respuesta provino de la caché local.
+  const [fallbackActive, setFallbackActive] = useState(false);
 
   // ─── Auth modal state ────────────────────────────
   const [showAuth, setShowAuth] = useState(false);
@@ -124,11 +126,13 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
     setView('results');
     setSuggestedCorrection(undefined);
     setMessage(undefined);
+    setFallbackActive(false);
     try {
       const data = await buscarMedicamento(q, type || 'text');
       setResultados(data.resultados);
       setTotal(data.total);
       setMessage(data.message);
+      setFallbackActive(data.fallback === true);
       if (data.suggestedCorrection) {
         setSuggestedCorrection(data.suggestedCorrection);
       }
@@ -290,6 +294,7 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
           onBack={handleBackToSearch}
           suggestedCorrection={suggestedCorrection}
           message={message}
+          fallback={fallbackActive}
         />
       ) : view === 'detail' && selected ? (
         <DetailScreen

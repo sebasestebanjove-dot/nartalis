@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 import { getNartalisSession } from '@/lib/auth';
+import { cimaBreaker } from '@/lib/circuit-breaker';
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
@@ -44,6 +45,7 @@ function normalizeSearch(q: string): string {
 
 // Persistencia de búsqueda (FASE 6/6A): registra user_id (solo server-side),
 // result_count real y was_successful. Nunca falla la búsqueda del usuario.
+// used_fallback/fallback_reason distinguen búsquedas servidas desde BD local.
 async function logSearch(opts: {
   query: string;
   searchType: 'text' | 'voice';
@@ -51,11 +53,13 @@ async function logSearch(opts: {
   resultCount: number;
   wasSuccessful: boolean;
   isTest?: boolean;
+  usedFallback?: boolean;
+  fallbackReason?: string | null;
 }) {
   try {
     await sql`
-      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test)
-      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false})
+      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test, used_fallback, fallback_reason)
+      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false}, ${opts.usedFallback ?? false}, ${opts.fallbackReason ?? null})
     `;
   } catch { /* el logging nunca debe romper la búsqueda */ }
 }
@@ -115,15 +119,148 @@ function mapResultados(data: any) {
   }));
 }
 
+// ═══ FALLBACK LOCAL ═══════════════════════════════════════════════════════
+// farma_name_cache solo contiene nombre + nregistro + updated_at. Nunca
+// inventamos laboratorio, presentaciones, prospecto, etc.: esos campos se
+// devuelven con valores seguros (vacíos/null) para que el usuario vea que es
+// un respaldo local, no una consulta completa a CIMA.
+
+// Escapa comodines LIKE para que la query del usuario no actúe como wildcard.
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (c) => '\\' + c);
+}
+
+async function searchLocalCache(q: string): Promise<{ nombre: string; nregistro: string }[]> {
+  const ql = q.trim().toLowerCase();
+  if (!ql) return [];
+  const pattern = `%${escapeLike(ql)}%`;
+  const prefix = `${escapeLike(ql)}%`;
+  try {
+    const rows = await sql`
+      SELECT nombre, nregistro FROM farma_name_cache
+      WHERE lower(nombre) LIKE ${pattern}
+      ORDER BY
+        CASE WHEN lower(nombre) = ${ql} THEN 0
+             WHEN lower(nombre) LIKE ${prefix} THEN 1
+             ELSE 2 END,
+        length(nombre) ASC
+      LIMIT 20
+    `;
+    return rows;
+  } catch {
+    return [];
+  }
+}
+
+function mapLocalResultados(rows: { nombre: string; nregistro: string }[]): any[] {
+  return rows.map((r) => ({
+    nombre: r.nombre || '',
+    registro: r.nregistro || '',
+    laboratorio: '',
+    laboratorioComercializador: '',
+    receta: false,
+    conduc: false,
+    cpresc: '',
+    vias: [],
+    imagenUrl: null,
+    prospectoUrl: null,
+    fichaTecnicaUrl: null,
+    generico: false,
+    triangulo: false,
+    psum: false,
+    notas: false,
+    biosimilar: false,
+    huerfano: false,
+    ema: false,
+    materialesInf: false,
+    comerc: true,
+    dosis: null,
+    formaFarmaceutica: null,
+    pactivos: null,
+  }));
+}
+
+function classifyCimaError(err: unknown): 'cima_unreachable' | 'timeout' {
+  const name = (err as any)?.name;
+  if (name === 'TimeoutError' || name === 'AbortError') return 'timeout';
+  return 'cima_unreachable';
+}
+
+// Sirve la respuesta de respaldo desde farma_name_cache. Siempre devuelve
+// fallback:true (o 502 solo si la BD local también falla). Nunca un 502 por
+// culpa de CIMA: si CIMA cae y la caché local no tiene resultados, devolvemos
+// una respuesta vacía con fallback:true y mensaje aclaratorio.
+async function serveLocalFallback(
+  q: string,
+  searchType: 'text' | 'voice',
+  userId: string | null,
+  isTest: boolean,
+  respond: (body: any, status?: number) => NextResponse,
+  reason: 'cima_unreachable' | 'cima_http_5xx' | 'timeout',
+) {
+  let rows: { nombre: string; nregistro: string }[];
+  try {
+    rows = await searchLocalCache(q);
+  } catch (e) {
+    console.error('Local fallback DB error:', e);
+    return respond({ error: 'Error de conexión con CIMA y base de datos local' }, 502);
+  }
+  const resultados = mapLocalResultados(rows);
+  const wasSuccessful = resultados.length > 0;
+  try {
+    await logSearch({
+      query: normalizeSearch(q),
+      searchType,
+      userId,
+      resultCount: resultados.length,
+      wasSuccessful,
+      isTest,
+      usedFallback: true,
+      fallbackReason: reason,
+    });
+  } catch { /* nunca rompe la respuesta */ }
+  const body: any = {
+    resultados,
+    total: resultados.length,
+    fallback: true,
+    fallbackReason: reason,
+  };
+  if (!wasSuccessful) {
+    body.message = 'CIMA no está disponible temporalmente y no encontramos resultados en los datos locales. Prueba de nuevo en unos minutos.';
+  }
+  return respond(body);
+}
+
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get('q')?.trim();
   const typeParam = request.nextUrl.searchParams.get('type')?.trim() || 'text';
+
+  // is_test / headers de test: SOLO activos en entornos NO producción.
+  const isTest = process.env.VERCEL_ENV !== 'production' && request.headers.get('x-nartalis-test') === '1';
+  // Simulación de caída de CIMA (solo tests; jamás en producción).
+  const forceCimaFail = isTest && request.headers.get('x-force-nartalis-cima-fail') === '1';
+
+  // Solo tests: acortar el cooldown del breaker para verificar recuperación.
+  if (isTest) {
+    const cd = request.headers.get('x-nartalis-breaker-cooldown-ms');
+    if (cd && /^\d+$/.test(cd)) {
+      const ms = parseInt(cd, 10);
+      if (ms >= 100) cimaBreaker.setOpenTimeoutMs(ms);
+    }
+  }
+
+  const respond = (body: any, status = 200) => {
+    const res = NextResponse.json(body, { status });
+    if (isTest) res.headers.set('x-nartalis-breaker-state', cimaBreaker.getState());
+    return res;
+  };
+
   if (!['text', 'voice'].includes(typeParam)) {
-    return NextResponse.json({ error: 'Tipo de búsqueda inválido' }, { status: 400 });
+    return respond({ error: 'Tipo de búsqueda inválido' }, 400);
   }
   const searchType = typeParam as 'text' | 'voice';
   if (!q || q.length < 2) {
-    return NextResponse.json({ error: 'Introduce al menos 2 caracteres' }, { status: 400 });
+    return respond({ error: 'Introduce al menos 2 caracteres' }, 400);
   }
 
   // user_id SIEMPRE se resuelve server-side desde la sesión. Nunca del cliente.
@@ -133,17 +270,25 @@ export async function GET(request: NextRequest) {
     userId = session?.id ?? null;
   } catch { /* sin sesión → búsqueda anónima */ }
 
-  // is_test: solo se activa con header X-Nartalis-Test:1 en entornos NO producción.
-  const isTest = process.env.VERCEL_ENV !== 'production' && request.headers.get('x-nartalis-test') === '1';
+  // ─── Circuit breaker: si está abierto, no gastamos el timeout de CIMA ───
+  if (!cimaBreaker.shouldAttemptCima()) {
+    return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_unreachable');
+  }
 
   try {
+    if (forceCimaFail) {
+      throw new DOMException('Simulated CIMA failure (test)', 'TimeoutError');
+    }
+
     const res = await fetch(
       `https://cima.aemps.es/cima/rest/medicamentos?nombre=${encodeURIComponent(q)}`,
       { signal: AbortSignal.timeout(10000) },
     );
     if (!res.ok) {
-      return NextResponse.json({ error: 'Error al consultar CIMA' }, { status: 502 });
+      cimaBreaker.onCimaFailure();
+      return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_http_5xx');
     }
+    cimaBreaker.onCimaSuccess();
     const data = await res.json();
     let resultados = mapResultados(data);
 
@@ -161,9 +306,10 @@ export async function GET(request: NextRequest) {
         try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
-        return NextResponse.json({
+        return respond({
           resultados,
           total: data.totalFilas || resultados.length,
+          fallback: false,
           ...(similar ? { suggestedCorrection: correctedBase } : {}),
         });
       }
@@ -171,7 +317,7 @@ export async function GET(request: NextRequest) {
       try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
       await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
       revalidatePath('/sitemap.xml');
-      return NextResponse.json({ resultados, total: data.totalFilas || resultados.length });
+      return respond({ resultados, total: data.totalFilas || resultados.length, fallback: false });
     }
 
     // ─── Sin resultados — reintentar con prefijos más cortos ──────
@@ -192,9 +338,10 @@ export async function GET(request: NextRequest) {
           try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest }); } catch {}
           await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
           revalidatePath('/sitemap.xml');
-          return NextResponse.json({
+          return respond({
             resultados: retryResultados,
             total: retryData.totalFilas || retryResultados.length,
+            fallback: false,
             suggestedCorrection: correctedBase,
           });
         }
@@ -229,9 +376,10 @@ export async function GET(request: NextRequest) {
           try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest }); } catch {}
                   await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
                   revalidatePath('/sitemap.xml');
-                  return NextResponse.json({
+                  return respond({
                     resultados: fuzzyResultados,
                     total: fuzzyData.totalFilas || fuzzyResultados.length,
+                    fallback: false,
                     suggestedCorrection: correctedBase,
                   });
                 }
@@ -245,8 +393,10 @@ export async function GET(request: NextRequest) {
     // ─── Sin resultados en ningún intento — se registra con result_count=0 ───
     try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false, isTest }); } catch {}
     const msg = 'No encontramos "' + q + '" en la base de datos de medicamentos AEMPS. Este producto puede no ser un medicamento registrado en España. Prueba con otro nombre.';
-    return NextResponse.json({ resultados: [], total: 0, message: msg });
-  } catch {
-    return NextResponse.json({ error: 'Error de conexión con CIMA' }, { status: 502 });
+    return respond({ resultados: [], total: 0, message: msg, fallback: false });
+  } catch (err) {
+    cimaBreaker.onCimaFailure();
+    const reason = classifyCimaError(err);
+    return await serveLocalFallback(q, searchType, userId, isTest, respond, reason);
   }
 }

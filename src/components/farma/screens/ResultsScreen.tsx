@@ -14,6 +14,7 @@ interface Props {
   onBack: () => void;
   suggestedCorrection?: string;
   message?: string;
+  fallback?: boolean;
 }
 
 function alertBadges(m: Medicamento): React.ReactNode[] {
@@ -84,7 +85,7 @@ function alertBadges(m: Medicamento): React.ReactNode[] {
   return badges.slice(0, 3);
 }
 
-export default function ResultsScreen({ resultados, total, query, loading, onSelect, onBack, suggestedCorrection, message }: Props) {
+export default function ResultsScreen({ resultados, total, query, loading, onSelect, onBack, suggestedCorrection, message, fallback }: Props) {
   const [visibleCount, setVisibleCount] = useState(5);
   const isFullyShown = visibleCount >= resultados.length;
 
@@ -100,6 +101,21 @@ export default function ResultsScreen({ resultados, total, query, loading, onSel
         <h2 style={styles.resultsTitle}>Resultados para "{query}"</h2>
         <span style={styles.resultsCount}>{total} resultados</span>
       </div>
+
+      {fallback === true && (
+        <div style={{
+          display: 'flex', gap: '0.5rem',
+          maxWidth: 672, margin: '0 auto 0.75rem', width: '100%',
+          padding: '0.65rem 1rem',
+          background: 'rgba(245,158,11,0.12)',
+          border: '1px solid rgba(245,158,11,0.35)',
+          borderRadius: 12,
+          fontSize: 13, lineHeight: 1.45, color: '#FBBF24',
+        }}>
+          <AlertTriangle size={17} style={{ flexShrink: 0, marginTop: 1 }} />
+          <span>Búsqueda en modo respaldo — datos locales/caché (CIMA no disponible). La información puede estar desactualizada.</span>
+        </div>
+      )}
 
       {loading ? (
         <div style={styles.loader}>Buscando medicamentos...</div>
