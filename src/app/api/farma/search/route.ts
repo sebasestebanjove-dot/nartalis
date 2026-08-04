@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 import { getNartalisSession } from '@/lib/auth';
 import { cimaBreaker } from '@/lib/circuit-breaker';
+import { ingestPrincipleIfPresent } from '@/lib/pa-principle';
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
@@ -306,6 +307,16 @@ export async function GET(request: NextRequest) {
         try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
+        for (const r of resultados) {
+          if (r.pactivos) {
+            for (const pa of r.pactivos.split(/,|\+/)) {
+              const trimmed = pa.trim();
+              if (trimmed) {
+                try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
+              }
+            }
+          }
+        }
         return respond({
           resultados,
           total: data.totalFilas || resultados.length,
@@ -314,10 +325,20 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
-      await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
-      revalidatePath('/sitemap.xml');
-      return respond({ resultados, total: data.totalFilas || resultados.length, fallback: false });
+        try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
+        await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
+        revalidatePath('/sitemap.xml');
+        for (const r of resultados) {
+          if (r.pactivos) {
+            for (const pa of r.pactivos.split(/,|\+/)) {
+              const trimmed = pa.trim();
+              if (trimmed) {
+                try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
+              }
+            }
+          }
+        }
+        return respond({ resultados, total: data.totalFilas || resultados.length, fallback: false });
     }
 
     // ─── Sin resultados — reintentar con prefijos más cortos ──────
@@ -338,6 +359,16 @@ export async function GET(request: NextRequest) {
           try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest }); } catch {}
           await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
           revalidatePath('/sitemap.xml');
+          for (const r of retryResultados) {
+            if (r.pactivos) {
+              for (const pa of r.pactivos.split(/,|\+/)) {
+                const trimmed = pa.trim();
+                if (trimmed) {
+                  try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
+                }
+              }
+            }
+          }
           return respond({
             resultados: retryResultados,
             total: retryData.totalFilas || retryResultados.length,
@@ -373,9 +404,19 @@ export async function GET(request: NextRequest) {
                 const fuzzyData = await fuzzyRes.json();
                 const fuzzyResultados = mapResultados(fuzzyData);
                 if (fuzzyResultados.length > 0) {
-          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest }); } catch {}
+                  try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest }); } catch {}
                   await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
                   revalidatePath('/sitemap.xml');
+                  for (const r of fuzzyResultados) {
+                    if (r.pactivos) {
+                      for (const pa of r.pactivos.split(/,|\+/)) {
+                        const trimmed = pa.trim();
+                        if (trimmed) {
+                          try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
+                        }
+                      }
+                    }
+                  }
                   return respond({
                     resultados: fuzzyResultados,
                     total: fuzzyData.totalFilas || fuzzyResultados.length,
