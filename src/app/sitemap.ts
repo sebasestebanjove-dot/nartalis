@@ -7,29 +7,6 @@ export const revalidate = 3600;
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';
 
-const KNOWN_PRINCIPLES = [
-  'omeprazol', 'esomeprazol', 'paracetamol', 'ibuprofeno', 'aspirina',
-  'atorvastatina', 'simvastatina', 'metformina', 'enalapril', 'losartan',
-  'amlodipino', 'levotiroxina', 'pantoprazol', 'tramadol', 'diazepam',
-  'lorazepam', 'sertralina', 'fluoxetina', 'citalopram', 'gabapentina',
-  'pregabalina', 'tamsulosina', 'finasterida', 'salbutamol', 'budesonida',
-  'furosemida', 'hidroclorotiazida', 'bisoprolol', 'carvedilol', 'clopidogrel',
-  'acenocumarol', 'apixaban', 'rivaroxaban', 'dabigatran', 'edoxaban',
-  'insulina', 'sitagliptina', 'dapagliflozina', 'empagliflozina',
-  'ranitidina', 'cetirizina', 'loratadina', 'ebastina', 'dexketoprofeno',
-  'naproxeno', 'diclofenaco', 'celecoxib', 'etoricoxib', 'morfina',
-  'fentanilo', 'metadona', 'buprenorfina', 'lidocaina', 'ropivacaina',
-  'amoxicilina', 'azitromicina', 'ciprofloxacino', 'levofloxacino', 'claritromicina',
-  'doxiciclina', 'cotrimoxazol', 'aciclovir', 'valaciclovir', 'fluconazol',
-  'itraconazol', 'voriconazol', 'metronidazol', 'albendazol', 'mebendazol',
-  'ivermectina', 'hidroxicloroquina', 'cloroquina', 'prednisona', 'prednisolona',
-  'metilprednisolona', 'dexametasona', 'hidrocortisona', 'fluticasona',
-  'beclometasona', 'mometasona', 'triamcinolona', 'betametasona',
-  'colecalciferol', 'calcio', 'hierro', 'acido-folico', 'vitamina-b12',
-  'cobalamina', 'tiamina', 'piridoxina', 'acido-ascorbico', 'tocoferol',
-  'fitomenadiona', 'retinol', 'biotina', 'zinc', 'magnesio', 'potasio',
-];
-
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     {
@@ -99,17 +76,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     }));
 
-    // ── Principios activos ──
+    // ── Principios activos (fuente: farma_principles) ──
+    const paRows = await sql`
+      SELECT slug
+      FROM farma_principles
+      WHERE tipo = 'simple'
+        AND active = true
+        AND medicine_count >= 3
+      ORDER BY slug
+    ` as { slug: string }[];
+
     const paPages: MetadataRoute.Sitemap = [
       {
         url: `${SITE_URL}/principios-activos`,
-        lastModified: new Date(),
         changeFrequency: 'weekly',
         priority: 0.7,
       },
-      ...KNOWN_PRINCIPLES.map(name => ({
-        url: `${SITE_URL}/principios-activos/${name}`,
-        lastModified: new Date(),
+      ...paRows.map(r => ({
+        url: `${SITE_URL}/principios-activos/${r.slug}`,
         changeFrequency: 'weekly' as const,
         priority: 0.7,
       })),

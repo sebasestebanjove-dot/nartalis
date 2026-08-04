@@ -4,9 +4,12 @@ import Link from 'next/link';
 import { cache } from 'react';
 import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
+import { ingestPrincipleIfPresent } from '@/lib/pa-principle';
+import { resolveMedicamentoPaLinks } from '@/lib/pa-resolve';
 import { getNartalisSession, toPublicUser } from '@/lib/auth';
 import ProspectoView from '@/components/farma/screens/ProspectoView';
 import type { Medicamento } from '@/components/farma/types';
+import type { PaLink } from '@/components/farma/screens/ProspectoView';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';
 
@@ -173,15 +176,13 @@ async function ingestAtcCache(raw: any, nregistro: string) {
 }
 
 // Persistencia PA — mismo patrón que ATC: fire-and-forget, best-effort.
+// FASE 2A.2: además de insertar pa_cache, resuelve/crea la entidad canónica
+// en farma_principles y guarda pa_principle_id (vínculo automático).
 async function ingestPaCache(raw: any, nregistro: string) {
   const pa = raw.vtm?.nombre || raw.pactivos || null;
   if (!pa) return;
   try {
-    await sql`
-      INSERT INTO pa_cache (principio, nregistro)
-      VALUES (${pa.toLowerCase()}, ${nregistro})
-      ON CONFLICT (principio, nregistro) DO UPDATE SET updated_at = NOW()
-    `;
+    await ingestPrincipleIfPresent(pa, nregistro);
   } catch { /* best-effort */ }
 }
 
@@ -259,9 +260,18 @@ export default async function ProspectoPage({ params }: Props) {
     permanentRedirect(`/prospectos/${canonicalSlug}`);
   }
 
-  const principio = m.pactivos || m.principiosActivos?.[0]?.nombre || null;
+    const principio = m.pactivos || m.principiosActivos?.[0]?.nombre || null;
 
-  // Cross-link queries: related drugs (same PA, same ATC L4). No N+1.
+    // Canonical cross-links: resolve simple indexable PAs (BLOQUE 5).
+    let canonicalPaLinks: PaLink[] = [];
+    try {
+      canonicalPaLinks = await resolveMedicamentoPaLinks(
+        principio || null,
+        (m.principiosActivos || []).map((p) => p.nombre)
+      );
+    } catch { /* best-effort */ }
+
+    // Cross-link queries: related drugs (same PA, same ATC L4). No N+1.
   let relatedPa: { nombre: string; nregistro: string }[] = [];
   let relatedAtc: { nombre: string; nregistro: string }[] = [];
   const atcL4Code = m.atcs?.find(a => a.nivel === 4)?.codigo;
@@ -374,7 +384,7 @@ export default async function ProspectoPage({ params }: Props) {
           <span style={{ color: '#64748B' }}>{m.nombre}</span>
         </nav>
       </div>
-      <ProspectoView medicamento={m} relatedPa={relatedPa} relatedAtc={relatedAtc} initialSessionUser={sessionUser} initialIsSaved={isSaved} initialIsFavorite={isFavorite} />
+      <ProspectoView medicamento={m} relatedPa={relatedPa} relatedAtc={relatedAtc} canonicalPaLinks={canonicalPaLinks} initialSessionUser={sessionUser} initialIsSaved={isSaved} initialIsFavorite={isFavorite} />
     </>
   );
 }

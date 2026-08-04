@@ -31,7 +31,7 @@ export default function PoliticaDePrivacidadPage() {
         <strong style={S.strong}>Nartalis</strong> (en adelante, &laquo;la plataforma&raquo;)
         es el titular del sitio web <strong style={S.strong}>nartalis.com</strong>.
         Puedes contactarnos en:{' '}
-        <strong style={S.strong}>info@contrial.app</strong>.
+        <strong style={S.strong}>info@nartalis.com</strong>.
       </p>
       <p style={S.p}>
         Nartalis es un proyecto independiente que ofrece un buscador informativo de
@@ -60,7 +60,7 @@ export default function PoliticaDePrivacidadPage() {
       <h3 style={S.h3}>2.3. Datos de contacto</h3>
       <p style={S.p}>
         Si decides contactarnos a través de{' '}
-        <strong style={S.strong}>info@contrial.app</strong>, recopilaremos tu
+        <strong style={S.strong}>info@nartalis.com</strong>, recopilaremos tu
         dirección de correo electrónico y cualquier información adicional que nos
         proporciones voluntariamente. Estos datos se conservarán únicamente para
         atender tu consulta y no se utilizarán para ningún otro fin.
@@ -134,7 +134,7 @@ export default function PoliticaDePrivacidadPage() {
       </ul>
       <p style={S.p}>
         Para ejercer cualquiera de estos derechos, escríbenos a{' '}
-        <strong style={S.strong}>info@contrial.app</strong> indicando el derecho que
+        <strong style={S.strong}>info@nartalis.com</strong> indicando el derecho que
         deseas ejercer y tu nombre. Te responderemos en un plazo máximo de 30 días.
       </p>
       <p style={S.p}>
@@ -213,7 +213,7 @@ export default function PoliticaDePrivacidadPage() {
 
       <p style={S.p}>
         Si tienes cualquier duda sobre esta Política de Privacidad, puedes contactarnos
-        en <strong style={S.strong}>info@contrial.app</strong>.
+        en <strong style={S.strong}>info@nartalis.com</strong>.
       </p>
     </div>
   );

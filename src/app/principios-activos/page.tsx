@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { sql } from '@/lib/db';
 import { catalogMetadata } from '@/lib/medicamentos';
 
 export const revalidate = 3600;
@@ -10,38 +11,10 @@ export const metadata: Metadata = catalogMetadata(
   'https://nartalis.com/principios-activos',
 );
 
-const KNOWN_PRINCIPLES = [
-  'omeprazol', 'esomeprazol', 'paracetamol', 'ibuprofeno', 'aspirina',
-  'atorvastatina', 'simvastatina', 'metformina', 'enalapril', 'losartan',
-  'amlodipino', 'levotiroxina', 'pantoprazol', 'tramadol', 'diazepam',
-  'lorazepam', 'sertralina', 'fluoxetina', 'citalopram', 'gabapentina',
-  'pregabalina', 'tamsulosina', 'finasterida', 'salbutamol', 'budesonida',
-  'furosemida', 'hidroclorotiazida', 'bisoprolol', 'carvedilol', 'clopidogrel',
-  'acenocumarol', 'apixaban', 'rivaroxaban', 'dabigatran', 'edoxaban',
-  'insulina', 'sitagliptina', 'dapagliflozina', 'empagliflozina',
-  'ranitidina', 'cetirizina', 'loratadina', 'ebastina', 'dexketoprofeno',
-  'naproxeno', 'diclofenaco', 'celecoxib', 'etoricoxib', 'morfina',
-  'fentanilo', 'metadona', 'buprenorfina', 'lidocaina', 'ropivacaina',
-  'amoxicilina', 'azitromicina', 'ciprofloxacino', 'levofloxacino', 'claritromicina',
-  'doxiciclina', 'cotrimoxazol', 'aciclovir', 'valaciclovir', 'fluconazol',
-  'itraconazol', 'voriconazol', 'metronidazol', 'albendazol', 'mebendazol',
-  'ivermectina', 'hidroxicloroquina', 'cloroquina', 'prednisona', 'prednisolona',
-  'metilprednisolona', 'dexametasona', 'hidrocortisona', 'fluticasona',
-  'beclometasona', 'mometasona', 'triamcinolona', 'betametasona',
-  'colecalciferol', 'calcio', 'hierro', 'acido-folico', 'vitamina-b12',
-  'cobalamina', 'tiamina', 'piridoxina', 'acido-ascorbico', 'tocoferol',
-  'fitomenadiona', 'retinol', 'biotina', 'zinc', 'magnesio', 'potasio',
-];
-
-function groupByLetter(items: string[]): Map<string, string[]> {
-  const groups = new Map<string, string[]>();
-  for (const item of items) {
-    const letter = item.charAt(0).toUpperCase();
-    const list = groups.get(letter) || [];
-    list.push(item);
-    groups.set(letter, list);
-  }
-  return groups;
+interface PrincipioRow {
+  slug: string;
+  nombre_canonico: string;
+  medicine_count: number;
 }
 
 const S = {
@@ -58,8 +31,23 @@ const S = {
   breadcrumbSep: { margin: '0 0.4rem', color: '#64748B' },
 };
 
-export default function PrincipiosActivosPage() {
-  const groups = groupByLetter(KNOWN_PRINCIPLES);
+export default async function PrincipiosActivosPage() {
+  const rows = await sql`
+    SELECT slug, nombre_canonico, medicine_count
+    FROM farma_principles
+    WHERE tipo = 'simple'
+      AND active = true
+      AND medicine_count >= 3
+    ORDER BY medicine_count DESC, nombre_canonico ASC
+  ` as PrincipioRow[];
+
+  const groups = new Map<string, PrincipioRow[]>();
+  for (const p of rows) {
+    const letter = (p.nombre_canonico?.charAt(0) || p.slug.charAt(0)).toUpperCase();
+    const list = groups.get(letter) || [];
+    list.push(p);
+    groups.set(letter, list);
+  }
   const sorted = Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   const breadcrumbLd = {
@@ -67,7 +55,7 @@ export default function PrincipiosActivosPage() {
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Inicio', item: 'https://nartalis.com/' },
-      { '@type': 'ListItem', position: 2, name: 'Medicamentos', item: 'https://nartalis.com/medicamentos' },
+      { '@type': 'ListItem', position: 2, name: 'Medicamentos', item: 'https://nartalis.com/medidamentos' },
       { '@type': 'ListItem', position: 3, name: 'Principios activos' },
     ],
   };
@@ -94,18 +82,18 @@ export default function PrincipiosActivosPage() {
         a sus prospectos y fichas técnicas basados en datos oficiales de la AEMPS (CIMA).
       </p>
 
-      {sorted.map(([letter, names]) => (
+      {sorted.map(([letter, items]) => (
         <div key={letter} style={{ marginBottom: '1.5rem' }}>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#6748FD', borderBottom: '2px solid #6748FD', paddingBottom: '0.3rem', marginBottom: '0.5rem' }}>{letter}</div>
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#6748FD', borderBottom: '2px solid #6748FD', paddingBottom: '0.3rem', marginBottom: '0.5rem' }}>{letter} <span style={{ fontSize: '0.75rem', color: '#94A3B8', fontWeight: 400 }}>{items.length}</span></div>
           <div style={S.grid}>
-            {names.sort().map(name => (
+            {items.map(p => (
               <Link
-                key={name}
-                href={`/principios-activos/${name}`}
+                key={p.slug}
+                href={`/principios-activos/${p.slug}`}
                 style={S.link}
                 className="pai-link"
               >
-                {name.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                {p.nombre_canonico}
               </Link>
             ))}
           </div>
@@ -114,7 +102,7 @@ export default function PrincipiosActivosPage() {
 
       <style>{`
         .pai-link:hover { background: rgba(103,72,253,0.12) !important; }
-      `}</style>
+       `}</style>
     </div>
   );
 }

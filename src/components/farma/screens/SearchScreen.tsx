@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, HeartPulse, Users } from 'lucide-react';
 import PersonalSpaceCard from '../PersonalSpaceCard';
 import { track } from '@/lib/analytics';
@@ -390,14 +391,15 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       {/* ── Hero ── */}
       <div style={S.hero}>
         <span className="farma-hero-brand" style={S.brand}>Nartalis</span>
-        <h1 className="farma-hero-h1" style={S.h1}>Te ayuda a cuidar tu salud y la de los tuyos.</h1>
+        <h1 className="farma-hero-h1" style={S.h1}>Información oficial de medicamentos y prospectos</h1>
         <p className="farma-hero-sub" style={S.subtitle}>
-          Información oficial de medicamentos. Descubre todo lo que Nartalis puede hacer por ti.
+          Busca cualquier medicamento y consulta su prospecto y ficha técnica con información oficial de la AEMPS (CIMA), siempre actualizada.
         </p>
       </div>
 
       {/* ── Search Box ── */}
       <div style={S.searchWrap}>
+        <h2 style={S.h2}>Encuentra información sobre tus medicamentos</h2>
         <div style={S.searchBox}>
           <svg style={S.searchIcon} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" />
@@ -476,6 +478,27 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
         </div>
       </div>
 
+      {/* ── Internal linking SEO (hub) ── */}
+      <div style={S.hubSection}>
+        <h2 style={S.h2}>Explora medicamentos y principios activos</h2>
+        <nav aria-label="Explorar medicamentos, principios activos y clasificación ATC" style={S.hubNav}>
+          <div style={S.hubCol}>
+            <Link href="/medicamentos" style={S.hubLink}>Todos los medicamentos</Link>
+            <Link href="/principios-activos" style={S.hubLink}>Principios activos</Link>
+            <div style={S.hubSubgroup}>
+              <Link href="/principios-activos/paracetamol" style={S.hubSubLink}>Paracetamol</Link>
+              <Link href="/principios-activos/ibuprofeno" style={S.hubSubLink}>Ibuprofeno</Link>
+            </div>
+          </div>
+          <div style={S.hubCol}>
+            <Link href="/atc" style={S.hubLink}>Clasificación ATC</Link>
+            <div style={S.hubSubgroup}>
+              <Link href="/atc/A02BC" style={S.hubSubLink}>A02BC — Inhibidores de la bomba de protones</Link>
+            </div>
+          </div>
+        </nav>
+      </div>
+
       <style>{`
         .farma-spin {
           animation: farmaSpin 1s linear infinite;
@@ -540,6 +563,14 @@ const S = {
     maxWidth: 480,
     marginLeft: 'auto',
     marginRight: 'auto',
+  },
+  h2: {
+    fontSize: 20,
+    fontWeight: 700,
+    color: '#E2E8F0',
+    margin: '0 0 0.9rem',
+    textAlign: 'center' as const,
+    lineHeight: 1.3,
   },
   searchWrap: {
     width: '100%',
@@ -653,5 +684,49 @@ const S = {
     fontSize: 13,
     color: '#93B4D0',
     lineHeight: 1.5,
+  },
+  hubSection: {
+    width: '100%',
+    maxWidth: 560,
+    marginTop: '1.6rem',
+    padding: '1.4rem 1.5rem',
+    borderRadius: 16,
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    backdropFilter: 'blur(8px)',
+  },
+  hubNav: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '1.1rem',
+  },
+  hubCol: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start',
+    gap: '0.35rem',
+  },
+  hubLink: {
+    color: '#F1F5F9',
+    fontSize: 14,
+    fontWeight: 600,
+    textDecoration: 'none',
+    padding: '0.25rem 0',
+    lineHeight: 1.4,
+  },
+  hubSubgroup: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'flex-start',
+    gap: '0.2rem',
+    paddingLeft: '0.7rem',
+    borderLeft: '1px solid rgba(255,255,255,0.12)',
+  },
+  hubSubLink: {
+    color: '#93B4D0',
+    fontSize: 13,
+    textDecoration: 'none',
+    padding: '0.2rem 0',
+    lineHeight: 1.4,
   },
 };

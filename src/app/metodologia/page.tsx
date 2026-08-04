@@ -45,12 +45,14 @@ export default function MetodologiaPage() {
       <h2 style={S.h2}>Actualización de la información</h2>
       <p style={S.p}>
         Para garantizar un rendimiento óptimo y evitar consultas repetitivas a la AEMPS, Nartalis
-        utiliza un sistema de caché en dos niveles:
+        conserva en caché los datos obtenidos de CIMA durante un máximo de 24 horas. Otras páginas
+        de catálogo pueden regenerarse periódicamente.
       </p>
-      <ul style={{ color: '#A0AEC0', fontSize: '0.9rem', lineHeight: 1.7 }}>
-        <li><strong style={{ color: '#D1D5DB' }}>Caché de datos (24 horas):</strong> los datos obtenidos de CIMA se almacenan durante un máximo de 24 horas. Si un medicamento ha sido actualizado en CIMA, la nueva información se reflejará en Nartalis en la siguiente consulta.</li>
-        <li><strong style={{ color: '#D1D5DB' }}>Caché de página (1 hora):</strong> la página HTML de cada ficha se regenera como máximo una vez por hora mediante ISR (Incremental Static Regeneration).</li>
-      </ul>
+      <p style={S.p}>
+        En concreto: los datos de cada medicamento se consultan a CIMA y se conservan en caché
+        durante un máximo de 24 horas. Por tanto, si un medicamento es actualizado en CIMA, la
+        nueva información podrá reflejarse en Nartalis cuando caduque ese período de caché.
+      </p>
 
       <h2 style={S.h2}>Qué es el nregistro</h2>
       <p style={S.p}>

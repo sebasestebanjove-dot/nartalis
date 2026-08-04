@@ -72,7 +72,7 @@ const faqs = [
   },
   {
     q: '¿Cómo puedo contactar con vosotros?',
-    a: 'Puedes escribirnos a <strong style={S.strong}>info@contrial.app</strong>. Estaremos encantados de resolver cualquier duda, sugerencia o incidencia que tengas.',
+    a: 'Puedes escribirnos a <strong style={S.strong}>info@nartalis.com</strong>. Estaremos encantados de resolver cualquier duda, sugerencia o incidencia que tengas.',
   },
 ];
 
@@ -92,12 +92,30 @@ function FaqItem({ question, answer, index }: { question: string; answer: string
 }
 
 export default function FAQPage() {
+  const faqLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(({ q, a }) => ({
+      '@type': 'Question',
+      name: q,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: a.replace(/<[^>]*>/g, ''),
+      },
+    })),
+  };
+
   return (
-    <div style={S.page}>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+      />
+      <div style={S.page}>
       <h1 style={S.h1}>Preguntas Frecuentes</h1>
       <p style={S.p}>
         Respuestas a las dudas más comunes sobre Nartalis. Si no encuentras lo que buscas,
-        escríbenos a <strong style={S.strong}>info@contrial.app</strong>.
+        escríbenos a <strong style={S.strong}>info@nartalis.com</strong>.
       </p>
 
       <div>
@@ -105,6 +123,7 @@ export default function FAQPage() {
           <FaqItem key={i} question={faq.q} answer={faq.a} index={i} />
         ))}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

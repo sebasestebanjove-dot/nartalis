@@ -12,10 +12,13 @@ import SaveMedButton from '../SaveMedButton';
 import { styles } from './styles';
 import { slugify } from '@/lib/slug';
 
+export type PaLink = { slug: string; nombre: string };
+
 interface Props {
   medicamento: Medicamento;
   relatedPa?: { nombre: string; nregistro: string }[];
   relatedAtc?: { nombre: string; nregistro: string }[];
+  canonicalPaLinks?: PaLink[];
   initialSessionUser?: { id: string; name: string; email: string; plan: string; role: string } | null;
   initialIsSaved?: boolean;
   initialIsFavorite?: boolean;
@@ -91,7 +94,7 @@ function PrincipiosActivos({ items }: { items: CimaPrincipioActivo[] }) {
   );
 }
 
-export default function ProspectoView({ medicamento, relatedPa, relatedAtc, initialSessionUser, initialIsSaved = false, initialIsFavorite = false }: Props) {
+export default function ProspectoView({ medicamento, relatedPa, relatedAtc, canonicalPaLinks = [], initialSessionUser, initialIsSaved = false, initialIsFavorite = false }: Props) {
   const [speaking, setSpeaking] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
@@ -412,7 +415,7 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc, init
 
         {(m.pactivos || (m.principiosActivos && m.principiosActivos.length > 0)) && (
           <div style={{ ...styles.section, marginTop: '0.5rem' }}>
-            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Medicamentos con el mismo principio activo</h2>
+            <h2 style={{ ...styles.sectionTitle, margin: 0 }}>Principio activo</h2>
             <div style={{ ...styles.compactCard, padding: '0.85rem 1rem' }}>
               <p style={{ fontSize: 13, color: '#A1A1AA', marginBottom: '0.6rem', lineHeight: 1.5 }}>
                 Este medicamento contiene{' '}
@@ -421,18 +424,29 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc, init
                 </strong>{' '}
                 como principio activo.
               </p>
-              <Link
-                href={`/principios-activos/${slugify(m.pactivos || m.principiosActivos?.[0]?.nombre || '')}`}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                  padding: '0.5rem 0.9rem', borderRadius: 8,
-                  background: 'rgba(103,72,253,0.12)', border: '1px solid rgba(103,72,253,0.25)',
-                  color: '#A78BFA', fontSize: 13, fontWeight: 600, textDecoration: 'none',
-                }}
-                className="pa-link"
-              >
-                Ver medicamentos con {m.pactivos || m.principiosActivos?.[0]?.nombre || ''} →
-              </Link>
+              {canonicalPaLinks && canonicalPaLinks.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {canonicalPaLinks.map((pa) => (
+                    <Link
+                      key={pa.slug}
+                      href={`/principios-activos/${pa.slug}`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                        padding: '0.5rem 0.9rem', borderRadius: 8,
+                        background: 'rgba(103,72,255,0.12)', border: '1px solid rgba(103,72,255,0.25)',
+                        color: '#A78BFA', fontSize: 13, fontWeight: 600, textDecoration: 'none',
+                      }}
+                      className="pa-link"
+                    >
+                      Ver {pa.nombre.toLowerCase()} →
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ fontSize: 13, color: '#6B7280' }}>
+                  Principio activo no disponible para navegar en estos momentos.
+                </span>
+              )}
             </div>
           </div>
         )}

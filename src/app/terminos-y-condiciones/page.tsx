@@ -133,7 +133,7 @@ export default function TerminosPage() {
 
       <p style={S.p}>
         Si tienes preguntas sobre estos Términos y Condiciones, puedes contactarnos en{' '}
-        <strong style={S.strong}>info@contrial.app</strong>.
+        <strong style={S.strong}>info@nartalis.com</strong>.
       </p>
     </div>
   );

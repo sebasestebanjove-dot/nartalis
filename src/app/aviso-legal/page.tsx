@@ -35,7 +35,7 @@ export default function AvisoLegalPage() {
       </p>
       <ul style={S.ul}>
         <li style={S.li}><strong style={S.strong}>Denominación comercial:</strong> Nartalis</li>
-        <li style={S.li}><strong style={S.strong}>Correo electrónico de contacto:</strong> info@contrial.app</li>
+        <li style={S.li}><strong style={S.strong}>Correo electrónico de contacto:</strong> info@nartalis.com</li>
       </ul>
       <p style={S.p}>
         El presente Aviso Legal regula el acceso y uso del sitio web que Nartalis pone
@@ -119,7 +119,7 @@ export default function AvisoLegalPage() {
 
       <p style={S.p}>
         Si tienes cualquier duda sobre este Aviso Legal, puedes contactarnos en{' '}
-        <strong style={S.strong}>info@contrial.app</strong>.
+        <strong style={S.strong}>info@nartalis.com</strong>.
       </p>
     </div>
   );

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Info } from 'lucide-react';
 
 const linkStyle: React.CSSProperties = {
@@ -42,11 +43,14 @@ export default function FarmaFooter() {
           display: 'flex', flexWrap: 'wrap', gap: '1.5rem',
           justifyContent: 'center', marginBottom: '1rem',
         }}>
-          <a href="/politica-de-privacidad" style={linkStyle}>Política de Privacidad</a>
-          <a href="/terminos-y-condiciones" style={linkStyle}>Términos y Condiciones</a>
-          <a href="/aviso-legal" style={linkStyle}>Aviso Legal</a>
-          <a href="/medicamentos" style={linkStyle}>Medicamentos</a>
-          <a href="/preguntas-frecuentes" style={linkStyle}>Preguntas Frecuentes</a>
+          <Link href="/politica-de-privacidad" style={linkStyle}>Política de Privacidad</Link>
+          <Link href="/terminos-y-condiciones" style={linkStyle}>Términos y Condiciones</Link>
+          <Link href="/aviso-legal" style={linkStyle}>Aviso Legal</Link>
+          <Link href="/medicamentos" style={linkStyle}>Medicamentos</Link>
+          <Link href="/principios-activos" style={linkStyle}>Principios activos</Link>
+          <Link href="/atc" style={linkStyle}>Clasificación ATC</Link>
+          <Link href="/preguntas-frecuentes" style={linkStyle}>Preguntas Frecuentes</Link>
+          <Link href="/metodologia" style={linkStyle}>Metodología</Link>
         </nav>
 
         {/* Copyright */}
