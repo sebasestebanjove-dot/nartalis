@@ -479,25 +479,31 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       </div>
 
       {/* ── Internal linking SEO (hub) ── */}
-      <div style={S.hubSection}>
-        <h2 style={S.h2}>Explora medicamentos y principios activos</h2>
-        <nav aria-label="Explorar medicamentos, principios activos y clasificación ATC" style={S.hubNav}>
-          <div style={S.hubCol}>
-            <Link href="/medicamentos" style={S.hubLink}>Todos los medicamentos</Link>
-            <Link href="/principios-activos" style={S.hubLink}>Principios activos</Link>
-            <div style={S.hubSubgroup}>
-              <Link href="/principios-activos/paracetamol" style={S.hubSubLink}>Paracetamol</Link>
-              <Link href="/principios-activos/ibuprofeno" style={S.hubSubLink}>Ibuprofeno</Link>
-            </div>
+          <div style={S.hubSection}>
+            <h2 style={S.h2}>Explora medicamentos y principios activos</h2>
+            <nav aria-label="Explorar medicamentos, principios activos y clasificación ATC" style={S.hubNav}>
+              <div style={S.hubCol}>
+                <Link href="/medicamentos" style={S.hubLink}>Todos los medicamentos</Link>
+                <Link href="/principios-activos" style={S.hubLink}>Principios activos</Link>
+                <div style={S.hubSubgroup}>
+                  <Link href="/principios-activos/paracetamol" style={S.hubSubLink}>Paracetamol</Link>
+                  <Link href="/principios-activos/ibuprofeno" style={S.hubSubLink}>Ibuprofeno</Link>
+                </div>
+              </div>
+              <div style={S.hubCol}>
+                <Link href="/atc" style={S.hubLink}>Clasificación ATC</Link>
+                <div style={S.hubSubgroup}>
+                  <Link href="/atc/A02BC" style={S.hubSubLink}>
+                    <div style={{ lineHeight: 1.3 }}>
+                      <div>Grupo de medicamentos</div>
+                      <div style={{ fontSize: '0.85rem', color: '#A78BFA', marginTop: '0.25rem' }}>Código ATC: A02BC</div>
+                      Inhibidores de la bomba de protones
+                    </div>
+                  </Link>
+                </div>
+              </div>
+            </nav>
           </div>
-          <div style={S.hubCol}>
-            <Link href="/atc" style={S.hubLink}>Clasificación ATC</Link>
-            <div style={S.hubSubgroup}>
-              <Link href="/atc/A02BC" style={S.hubSubLink}>A02BC — Inhibidores de la bomba de protones</Link>
-            </div>
-          </div>
-        </nav>
-      </div>
 
       <style>{`
         .farma-spin {
