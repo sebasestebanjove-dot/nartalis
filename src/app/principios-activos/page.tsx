@@ -55,7 +55,7 @@ export default async function PrincipiosActivosPage() {
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Inicio', item: 'https://nartalis.com/' },
-      { '@type': 'ListItem', position: 2, name: 'Medicamentos', item: 'https://nartalis.com/medidamentos' },
+      { '@type': 'ListItem', position: 2, name: 'Medicamentos', item: 'https://nartalis.com/medicamentos' },
       { '@type': 'ListItem', position: 3, name: 'Principios activos' },
     ],
   };

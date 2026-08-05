@@ -62,6 +62,7 @@ export function catalogMetadata(title: string, description: string, canonical: s
       url: canonical,
       siteName: 'Nartalis',
       locale: 'es_ES',
+      type: 'website',
     },
     twitter: {
       card: 'summary_large_image' as const,

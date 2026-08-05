@@ -63,9 +63,6 @@ const S = {
   breadcrumb: { fontSize: 13, color: '#94A3B8', marginBottom: '1.5rem' },
   breadcrumbLink: { color: '#94A3B8', textDecoration: 'none' },
   breadcrumbSep: { margin: '0 0.4rem', color: '#64748B' },
-  pagination: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', flexWrap: 'wrap' as const, marginTop: '1.5rem' },
-  pageLink: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 36, height: 36, borderRadius: 8, background: 'rgba(103,72,253,0.08)', color: '#A78BFA', fontWeight: 600, fontSize: '0.8rem', textDecoration: 'none' },
-  pageLinkActive: { background: 'rgba(103,72,253,0.25)', color: '#C4B5FD', fontWeight: 700 },
 };
 
 export default async function AtcCodePage({ params }: Props) {
@@ -154,18 +151,9 @@ export default async function AtcCodePage({ params }: Props) {
       </div>
 
       {totalPages > 1 && (
-        <div style={S.pagination}>
-          {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-            const p = i + 1;
-            return (
-              <Link key={p}
-                href={p === 1 ? `/atc/${upper}` : `/atc/${upper}/${p}`}
-                style={{ ...S.pageLink, ...(p === 1 ? S.pageLinkActive : {}) }}
-              >{p}</Link>
-            );
-          })}
-          {totalPages > 5 && <span style={{ color: '#66748A', fontSize: '0.8rem' }}>… {totalPages}</span>}
-        </div>
+        <p style={{ fontSize: '0.85rem', color: '#66748A', marginTop: '1.5rem' }}>
+          Se muestran los primeros {drugs.length} medicamentos de {drugCount} clasificados en {upper}.
+        </p>
       )}
 
       <style>{`.atc-lnk:hover { color: #C4B5FD !important; }`}</style>

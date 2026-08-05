@@ -12,7 +12,11 @@ export const metadata: Metadata = {
     siteName: 'Nartalis',
     locale: 'es_ES',
   },
-  twitter: { card: 'summary_large_image' },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Preguntas Frecuentes — Nartalis',
+    description: 'Respuestas a las preguntas más frecuentes sobre Nartalis: cómo funciona el buscador, qué datos mostramos, cómo se actualiza la información y más.',
+  },
 };
 
 const S = {
