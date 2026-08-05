@@ -121,7 +121,8 @@ export default async function PrincipioActivoPage({ params }: Props) {
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Inicio', item: 'https://nartalis.com/' },
       { '@type': 'ListItem', position: 2, name: 'Medicamentos', item: 'https://nartalis.com/medicamentos' },
-      { '@type': 'ListItem', position: 3, name: displayName },
+      { '@type': 'ListItem', position: 3, name: 'Principios activos', item: 'https://nartalis.com/principios-activos' },
+      { '@type': 'ListItem', position: 4, name: displayName },
     ],
   };
 
@@ -136,6 +137,8 @@ export default async function PrincipioActivoPage({ params }: Props) {
         <Link href="/" style={S.breadcrumbLink}>Inicio</Link>
         <span style={S.breadcrumbSep}>/</span>
         <Link href="/medicamentos" style={S.breadcrumbLink}>Medicamentos</Link>
+        <span style={S.breadcrumbSep}>/</span>
+        <Link href="/principios-activos" style={S.breadcrumbLink}>Principios activos</Link>
         <span style={S.breadcrumbSep}>/</span>
         <span style={{ color: '#64748B' }}>{displayName}</span>
       </nav>

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { cache } from 'react';
 import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
+import { countByLetter } from '@/lib/medicamentos';
 import { ingestPrincipleIfPresent } from '@/lib/pa-principle';
 import { resolveMedicamentoPaLinks } from '@/lib/pa-resolve';
 import { getNartalisSession, toPublicUser } from '@/lib/auth';
@@ -341,13 +342,28 @@ export default async function ProspectoPage({ params }: Props) {
   };
   Object.keys(jsonLd).forEach(k => { if (jsonLd[k] === undefined) delete jsonLd[k]; });
 
+  // Breadcrumb con retorno a la letra indexada del medicamento (redistribuye autoridad).
+  // Solo enlaza si la letra tiene al menos un medicamento indexado (evita enlaces a 404).
+  const firstChar = m.nombre.charAt(0);
+  const letterCandidate = /^[a-zA-Z]$/.test(firstChar) ? firstChar.toUpperCase() : null;
+  let letter: string | null = null;
+  if (letterCandidate) {
+    try {
+      const c = await countByLetter(letterCandidate);
+      if (c > 0) letter = letterCandidate;
+    } catch { /* best-effort: sin letra, breadcrumb de 3 niveles */ }
+  }
+
   const breadcrumbLd = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Inicio', item: `${SITE_URL}/` },
       { '@type': 'ListItem', position: 2, name: 'Medicamentos', item: `${SITE_URL}/medicamentos` },
-      { '@type': 'ListItem', position: 3, name: m.nombre },
+      ...(letter
+        ? [{ '@type': 'ListItem', position: 3, name: letter, item: `${SITE_URL}/medicamentos/${letter.toLowerCase()}` }]
+        : []),
+      { '@type': 'ListItem', position: letter ? 4 : 3, name: m.nombre },
     ],
   };
 
@@ -380,6 +396,10 @@ export default async function ProspectoPage({ params }: Props) {
           <Link href="/" style={{ color: '#94A3B8', textDecoration: 'none' }}>Inicio</Link>
           <span style={{ margin: '0 0.4rem' }}>/</span>
           <Link href="/medicamentos" style={{ color: '#94A3B8', textDecoration: 'none' }}>Medicamentos</Link>
+          {letter ? (<>
+            <span style={{ margin: '0 0.4rem' }}>/</span>
+            <Link href={`/medicamentos/${letter.toLowerCase()}`} style={{ color: '#94A3B8', textDecoration: 'none' }}>{letter}</Link>
+          </>) : null}
           <span style={{ margin: '0 0.4rem' }}>/</span>
           <span style={{ color: '#64748B' }}>{m.nombre}</span>
         </nav>
