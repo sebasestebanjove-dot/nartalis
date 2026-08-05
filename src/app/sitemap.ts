@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
 import { getAllLetters } from '@/lib/medicamentos';
+import { listPaSeo, listAtcSeo } from '@/lib/seo-contenido';
 
 export const revalidate = 3600;
 
@@ -123,5 +124,23 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
 
-  return [...staticPages, ...letterPages, ...drugPages, ...paPages, ...atcPages];
+  // ── FASE B: T1 "qué es / para qué sirve" (hasta 250 PA, >=5 medicamentos) ──
+  const seoPa = await listPaSeo(250);
+  const t1Pages: MetadataRoute.Sitemap = seoPa.map(r => ({
+    url: `${SITE_URL}/medicamentos/para-que-sirve/${r.slug}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
+
+  // ── FASE B: T2 "grupos terapéuticos" ATC nivel 3 (>=20 medicamentos, hasta 120) ──
+  const seoAtc = await listAtcSeo(20, 120);
+  const t2Pages: MetadataRoute.Sitemap = seoAtc.map(r => ({
+    url: `${SITE_URL}/medicamentos/grupos-terapeuticos/${r.code}`,
+    lastModified: new Date(),
+    changeFrequency: 'weekly' as const,
+    priority: 0.6,
+  }));
+
+  return [...staticPages, ...letterPages, ...drugPages, ...paPages, ...atcPages, ...t1Pages, ...t2Pages];
 }
