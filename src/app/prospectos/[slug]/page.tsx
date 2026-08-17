@@ -21,7 +21,7 @@ interface Props {
 const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | null> => {
   try {
     const res = await fetch(
-      `https://cima.aemps.es/cima/rest/medicamentos?nombre=${encodeURIComponent(nombre)}`,
+      `https://cima.aemps.es/cima/rest/medicamentos?nombre=${encodeURIComponent(nombre.replace(/-/g, ' '))}`,
       { next: { revalidate: 86400 }, signal: AbortSignal.timeout(10000) },
     );
     if (!res.ok) return null;
@@ -243,12 +243,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ProspectoPage({ params }: Props) {
   const { slug } = await params;
 
-  // Redirect 301 if slug contains uppercase
-  if (slug !== slug.toLowerCase()) {
-    permanentRedirect(`/prospectos/${slug.toLowerCase()}`);
-  }
-
   const { nregistro, namePart } = parseSlug(slug);
+
+  // Redirect 301 only normalizes the name part. The nregistro keeps its case:
+  // CIMA's individual endpoint is case-sensitive (BE318254 works, be318254 → 204).
+  const normalized = slug.includes('--') && nregistro
+    ? `${namePart.toLowerCase()}--${nregistro}`
+    : slug.toLowerCase();
+  if (slug !== normalized) {
+    permanentRedirect(`/prospectos/${normalized}`);
+  }
 
   let m = nregistro ? await getByRegistro(nregistro) : null;
   if (!m && namePart) m = await fetchMedicamento(namePart);
