@@ -92,9 +92,12 @@ const fetchMedicamentoByNregistro = cache(async (nregistro: string): Promise<Med
     if (!res.ok) return null;
     const raw = await res.json();
     if (!raw.nombre) return null;
-    // Ingesta ATC best-effort (no bloquea el renderizado)
-    ingestAtcCache(raw, nregistro).catch(e => console.error('ATC ingest error:', e?.message || e));
-    ingestPaCache(raw, nregistro).catch(e => console.error('PA ingest error:', e?.message || e));
+    // Ingesta ATC best-effort (no bloquea el renderizado).
+    // FASE 1 (ahorro Neon): se desactiva en producción con DISABLE_PROSPECT_INGEST=1.
+    if (process.env.DISABLE_PROSPECT_INGEST !== '1') {
+      ingestAtcCache(raw, nregistro).catch(e => console.error('ATC ingest error:', e?.message || e));
+      ingestPaCache(raw, nregistro).catch(e => console.error('PA ingest error:', e?.message || e));
+    }
     return {
       nombre: raw.nombre || '',
       registro: raw.nregistro || '',
