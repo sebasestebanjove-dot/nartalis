@@ -99,7 +99,7 @@ export default function ContextualMedSearch({ source = 'medicine_page', heading 
         <form style={CS.form} onSubmit={(e) => { e.preventDefault(); handleSearch(); }}>
           <label htmlFor="ctx-med-search" className="ctx-visually-hidden">Buscar medicamento, principio activo o nombre comercial</label>
           <div style={CS.inputBox}>
-            <svg style={CS.icon} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg style={CS.icon} viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
@@ -159,7 +159,7 @@ export default function ContextualMedSearch({ source = 'medicine_page', heading 
                     type="button"
                     onClick={() => handleSelect(r, i + 1)}
                     style={CS.row}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.04)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                   >
                     <span style={CS.rowName}>{r.nombre}</span>
@@ -175,6 +175,10 @@ export default function ContextualMedSearch({ source = 'medicine_page', heading 
       </div>
 
       <style>{`
+        .ctx-med-search input::placeholder {
+          color: #6B7280;
+          opacity: 1;
+        }
         .ctx-spin { animation: ctxSpin 1s linear infinite; }
         @keyframes ctxSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         .ctx-med-search input:focus-visible,
@@ -196,7 +200,8 @@ export default function ContextualMedSearch({ source = 'medicine_page', heading 
   );
 }
 
-/* Tokens visuales coherentes con las secciones de la ficha (compactCard/#2C2C2E, acentos #A78BFA). */
+/* Tokens visuales coherentes con las secciones de la ficha: fondo blanco integrado
+   en la ficha, texto oscuro de alto contraste y acentos #A78BFA. */
 const CS: Record<string, React.CSSProperties> = {
   section: {
     marginBottom: '0.75rem',
@@ -204,17 +209,17 @@ const CS: Record<string, React.CSSProperties> = {
   title: {
     fontSize: 15,
     fontWeight: 700,
-    color: '#F1F5F9',
+    color: '#18181B',
     margin: '0 0 0.4rem',
   },
   card: {
-    background: '#2C2C2E',
+    background: 'white',
     borderRadius: 12,
     padding: '0.85rem 1rem',
   },
   sub: {
     fontSize: 13,
-    color: '#A1A1AA',
+    color: '#3F3F46',
     lineHeight: 1.5,
     margin: '0 0 0.7rem',
   },
@@ -230,8 +235,8 @@ const CS: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: '0.45rem',
-    background: '#1C1C1E',
-    border: '1px solid #3A3A3C',
+    background: 'white',
+    border: '1px solid #D4D4D8',
     borderRadius: 10,
     padding: '0 0.7rem',
   },
@@ -247,7 +252,7 @@ const CS: Record<string, React.CSSProperties> = {
     fontSize: 16,
     border: 'none',
     background: 'transparent',
-    color: '#F1F5F9',
+    color: '#18181B',
     outline: 'none',
     fontFamily: 'inherit',
   },
@@ -274,7 +279,7 @@ const CS: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: '0.4rem',
     fontSize: 13,
-    color: '#93B4D0',
+    color: '#52525B',
     margin: '0.7rem 0 0',
   },
   errorBox: {
@@ -287,12 +292,12 @@ const CS: Record<string, React.CSSProperties> = {
     background: 'rgba(239,68,68,0.1)',
     border: '1px solid rgba(239,68,68,0.3)',
     fontSize: 13,
-    color: '#FCA5A5',
+    color: '#B91C1C',
     lineHeight: 1.45,
   },
   empty: {
     fontSize: 13,
-    color: '#A1A1AA',
+    color: '#52525B',
     lineHeight: 1.5,
     margin: '0.7rem 0 0',
   },
@@ -323,13 +328,13 @@ const CS: Record<string, React.CSSProperties> = {
   rowName: {
     fontSize: 14,
     fontWeight: 600,
-    color: '#D1D5DB',
+    color: '#18181B',
     lineHeight: 1.35,
     wordBreak: 'break-word',
   },
   rowMeta: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#6B7280',
     lineHeight: 1.35,
     maxWidth: '100%',
     overflow: 'hidden',
