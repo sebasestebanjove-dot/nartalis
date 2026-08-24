@@ -44,9 +44,28 @@ function normalizeSearch(q: string): string {
   return q.trim().toLowerCase();
 }
 
+// Origen de la búsqueda (trazabilidad interna). El total y el Top 5 son SIEMPRE
+// globales: source/source_page solo describen el punto de entrada.
+const SEARCH_SOURCES = ['home', 'medicine_page'] as const;
+type SearchSource = (typeof SEARCH_SOURCES)[number];
+
+function parseSource(v: string | null): SearchSource {
+  return (SEARCH_SOURCES as readonly string[]).includes(v || '') ? (v as SearchSource) : 'home';
+}
+
+function parseSourcePage(v: string | null): string | null {
+  if (!v) return null;
+  const cleaned = v.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+  if (!cleaned || !cleaned.startsWith('/')) return null;
+  return cleaned.slice(0, 200);
+}
+
 // Persistencia de búsqueda (FASE 6/6A): registra user_id (solo server-side),
 // result_count real y was_successful. Nunca falla la búsqueda del usuario.
 // used_fallback/fallback_reason distinguen búsquedas servidas desde BD local.
+// source/source_page registran el origen ('home' | 'medicine_page'); si la
+// migración no estuviera aplicada, se reintenta el INSERT legacy para que el
+// registro de búsquedas NUNCA se pierda.
 async function logSearch(opts: {
   query: string;
   searchType: 'text' | 'voice';
@@ -56,13 +75,22 @@ async function logSearch(opts: {
   isTest?: boolean;
   usedFallback?: boolean;
   fallbackReason?: string | null;
+  source?: SearchSource;
+  sourcePage?: string | null;
 }) {
   try {
     await sql`
-      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test, used_fallback, fallback_reason)
-      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false}, ${opts.usedFallback ?? false}, ${opts.fallbackReason ?? null})
+      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test, used_fallback, fallback_reason, source, source_page)
+      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false}, ${opts.usedFallback ?? false}, ${opts.fallbackReason ?? null}, ${opts.source ?? 'home'}, ${opts.sourcePage ?? null})
     `;
-  } catch { /* el logging nunca debe romper la búsqueda */ }
+  } catch {
+    try {
+      await sql`
+        INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test, used_fallback, fallback_reason)
+        VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false}, ${opts.usedFallback ?? false}, ${opts.fallbackReason ?? null})
+      `;
+    } catch { /* el logging nunca debe romper la búsqueda */ }
+  }
 }
 
 async function upsertCache(nombre: string, nregistro: string) {
@@ -198,6 +226,8 @@ async function serveLocalFallback(
   isTest: boolean,
   respond: (body: any, status?: number) => NextResponse,
   reason: 'cima_unreachable' | 'cima_http_5xx' | 'timeout',
+  source: SearchSource = 'home',
+  sourcePage: string | null = null,
 ) {
   let rows: { nombre: string; nregistro: string }[];
   try {
@@ -218,6 +248,8 @@ async function serveLocalFallback(
       isTest,
       usedFallback: true,
       fallbackReason: reason,
+      source,
+      sourcePage,
     });
   } catch { /* nunca rompe la respuesta */ }
   const body: any = {
@@ -235,6 +267,9 @@ async function serveLocalFallback(
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get('q')?.trim();
   const typeParam = request.nextUrl.searchParams.get('type')?.trim() || 'text';
+  // Origen de la búsqueda: validado server-side. El cliente solo sugiere.
+  const source = parseSource(request.nextUrl.searchParams.get('source'));
+  const sourcePage = parseSourcePage(request.nextUrl.searchParams.get('source_page'));
 
   // is_test / headers de test: SOLO activos en entornos NO producción.
   const isTest = process.env.VERCEL_ENV !== 'production' && request.headers.get('x-nartalis-test') === '1';
@@ -273,7 +308,7 @@ export async function GET(request: NextRequest) {
 
   // ─── Circuit breaker: si está abierto, no gastamos el timeout de CIMA ───
   if (!cimaBreaker.shouldAttemptCima()) {
-    return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_unreachable');
+    return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_unreachable', source, sourcePage);
   }
 
   try {
@@ -287,7 +322,7 @@ export async function GET(request: NextRequest) {
     );
     if (!res.ok) {
       cimaBreaker.onCimaFailure();
-      return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_http_5xx');
+      return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_http_5xx', source, sourcePage);
     }
     cimaBreaker.onCimaSuccess();
     const data = await res.json();
@@ -304,7 +339,7 @@ export async function GET(request: NextRequest) {
       if (!exactMatch) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         const similar = isSimilar(q, correctedBase);
-        try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
+        try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
         for (const r of resultados) {
@@ -325,7 +360,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-        try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest }); } catch {}
+        try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
         for (const r of resultados) {
@@ -356,7 +391,7 @@ export async function GET(request: NextRequest) {
         if (retryResultados.length > 0) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           if (!isSimilar(q, correctedBase)) break;
-          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest }); } catch {}
+          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
           await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
           revalidatePath('/sitemap.xml');
           for (const r of retryResultados) {
@@ -404,7 +439,7 @@ export async function GET(request: NextRequest) {
                 const fuzzyData = await fuzzyRes.json();
                 const fuzzyResultados = mapResultados(fuzzyData);
                 if (fuzzyResultados.length > 0) {
-                  try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest }); } catch {}
+                  try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
                   await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
                   revalidatePath('/sitemap.xml');
                   for (const r of fuzzyResultados) {
@@ -432,12 +467,12 @@ export async function GET(request: NextRequest) {
     }
 
     // ─── Sin resultados en ningún intento — se registra con result_count=0 ───
-    try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false, isTest }); } catch {}
+    try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false, isTest, source, sourcePage }); } catch {}
     const msg = 'No encontramos "' + q + '" en la base de datos de medicamentos AEMPS. Este producto puede no ser un medicamento registrado en España. Prueba con otro nombre.';
     return respond({ resultados: [], total: 0, message: msg, fallback: false });
   } catch (err) {
     cimaBreaker.onCimaFailure();
     const reason = classifyCimaError(err);
-    return await serveLocalFallback(q, searchType, userId, isTest, respond, reason);
+    return await serveLocalFallback(q, searchType, userId, isTest, respond, reason, source, sourcePage);
   }
 }

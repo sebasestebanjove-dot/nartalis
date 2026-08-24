@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import type { Medicamento, CimaPrincipioActivo } from '../types';
 import { styles } from './styles';
+import ContextualMedSearch from '../ContextualMedSearch';
+import { makeSlug } from '@/lib/slug';
 import type { PublicSessionUser } from '@/lib/auth';
 
 interface Props {
@@ -421,6 +423,13 @@ export default function DetailScreen({ medicamento, onBack, loading, onDAtcDetec
             </div>
           </div>
         )}
+
+        {/* Buscador contextual: mismo componente que en /prospectos/[slug]. Origen
+            'medicine_page' aunque el pathname siga siendo '/' (vista SPA del Home). */}
+        <ContextualMedSearch
+          source="medicine_page"
+          sourcePage={m.nombre && m.registro ? `/prospectos/${makeSlug(m.nombre, m.registro)}` : undefined}
+        />
 
         {/* Actions row */}
         <div style={styles.actionRow}>

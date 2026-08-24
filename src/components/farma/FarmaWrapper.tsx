@@ -128,7 +128,7 @@ export default function FarmaWrapper({ initialSessionUser = null }: FarmaWrapper
     setMessage(undefined);
     setFallbackActive(false);
     try {
-      const data = await buscarMedicamento(q, type || 'text');
+      const data = await buscarMedicamento(q, type || 'text', { source: 'home', sourcePage: '/' });
       setResultados(data.resultados);
       setTotal(data.total);
       setMessage(data.message);

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import type { Medicamento, CimaPrincipioActivo } from '../types';
 import SaveMedButton from '../SaveMedButton';
+import ContextualMedSearch from '../ContextualMedSearch';
 import { styles } from './styles';
 import { slugify } from '@/lib/slug';
 
@@ -499,6 +500,10 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc, cano
             </div>
           </div>
         )}
+
+        {/* Buscador contextual: mismo motor que el Home, origen 'medicine_page'.
+            Continuidad de consulta sin abandonar la ficha. No sustituye contenido. */}
+        <ContextualMedSearch source="medicine_page" />
 
         <div style={styles.actionRow}>
           {speaking ? (
