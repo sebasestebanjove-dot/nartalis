@@ -84,7 +84,24 @@ export async function GET(req: NextRequest) {
               COUNT(*) FILTER (WHERE search_type = 'voice')::int AS voice_count
        FROM farma_search_log ${where}
        GROUP BY DATE(created_at)
-       ORDER BY day ASC`,
+       ORDER BY day DESC`,
+      params,
+    )
+
+    // Origen de las búsquedas (campo source): única agregación, mismos filtros.
+    // Clasificación exclusiva por source — sin heurísticas. NULL/vacío = histórico sin atribuir.
+    const bySource = await sql.query(
+      `SELECT CASE
+                WHEN source IS NULL OR source = '' THEN 'no_atribuido'
+                WHEN source = 'home' THEN 'home'
+                WHEN source = 'medicine_page' THEN 'medicine_page'
+                ELSE 'otros'
+              END AS origin,
+              COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE was_successful)::int AS with_results,
+              COUNT(*) FILTER (WHERE NOT was_successful)::int AS without_results
+       FROM farma_search_log ${where}
+       GROUP BY origin`,
       params,
     )
 
@@ -113,6 +130,7 @@ export async function GET(req: NextRequest) {
         topVoice,
         topZero,
         daily,
+        bySource,
         byUser,
       },
     })

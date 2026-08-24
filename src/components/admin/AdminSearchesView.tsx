@@ -18,8 +18,18 @@ interface SearchLogData {
   topVoice: { query: string; total_count: number }[]
   topZero: { query: string; total_count: number }[]
   daily: { day: string; total_count: number; voice_count: number }[]
+  bySource: { origin: string; total: number; with_results: number; without_results: number }[]
   byUser: { user_id: string; email: string; total: number; text: number; voice: number; success: number }[]
 }
+
+// Etiquetas de origen (clasificación exclusiva por farma_search_log.source).
+const ORIGIN_LABELS: Record<string, string> = {
+  home: 'Home',
+  medicine_page: 'Ficha medicamento',
+  no_atribuido: 'No atribuido / histórico',
+  otros: 'Otros',
+}
+const ORIGIN_ORDER = ['home', 'medicine_page', 'no_atribuido', 'otros']
 
 const fmtDay = (day: string) => {
   const d = new Date(day + 'T00:00:00')
@@ -112,8 +122,42 @@ export default function AdminSearchesView() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div style={adminS.section}>
-              <div style={adminS.sectionTitle}>Top consultas</div>
+          <div style={adminS.section}>
+            <div style={adminS.sectionTitle}>Origen de las búsquedas</div>
+            {data.bySource.length === 0 ? (
+              <div style={adminS.empty}>Sin datos.</div>
+            ) : (
+              <div style={adminS.tableWrap}>
+                <table style={adminS.table}>
+                  <thead>
+                    <tr>
+                      <th style={adminS.th}>Origen</th>
+                      <th style={adminS.th}>Total</th>
+                      <th style={adminS.th}>Con resultados</th>
+                      <th style={adminS.th}>Sin resultados</th>
+                      <th style={adminS.th}>Éxito %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...data.bySource]
+                      .sort((a, b) => ORIGIN_ORDER.indexOf(a.origin) - ORIGIN_ORDER.indexOf(b.origin))
+                      .map((s) => (
+                        <tr key={s.origin}>
+                          <td style={adminS.td}>{ORIGIN_LABELS[s.origin] || s.origin}</td>
+                          <td style={{ ...adminS.td, fontWeight: 700 }}>{s.total}</td>
+                          <td style={adminS.td}>{s.with_results}</td>
+                          <td style={adminS.td}>{s.without_results}</td>
+                          <td style={adminS.td}>{s.total ? `${((s.with_results / s.total) * 100).toFixed(1)}%` : '—'}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div style={adminS.section}>
+            <div style={adminS.sectionTitle}>Top consultas</div>
               {data.topQueries.length === 0 ? (
                 <div style={adminS.empty}>Sin datos.</div>
               ) : (
