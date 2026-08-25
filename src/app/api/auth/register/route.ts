@@ -42,6 +42,8 @@ export async function POST(req: Request) {
                 status, plan, role, email_verified, created_at::text, last_login_at::text
     `
 
+    await sql`UPDATE nartalis_users SET last_login_at = NOW() WHERE id = ${user.id}`
+
     await createNartalisSession(user)
     return NextResponse.json({ ok: true })
   } catch (err) {

@@ -12,6 +12,7 @@ import SaveMedButton from '../SaveMedButton';
 import ContextualMedSearch from '../ContextualMedSearch';
 import { styles } from './styles';
 import { slugify } from '@/lib/slug';
+import { track } from '@/lib/analytics';
 
 export type PaLink = { slug: string; nombre: string };
 
@@ -99,6 +100,7 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc, cano
   const [speaking, setSpeaking] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
+  const viewTracked = useRef(false);
   const m = medicamento;
 
   const alertChips = useAlerts(m);
@@ -113,6 +115,13 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc, cano
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showLegend]);
+
+  useEffect(() => {
+    if (m.registro && !viewTracked.current) {
+      viewTracked.current = true;
+      track('medicine_view', { nregistro: m.registro, nombre: m.nombre });
+    }
+  }, [m.registro, m.nombre]);
 
   const textSummary = [
     m.nombre,

@@ -4,6 +4,8 @@ import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import FarmaFooter from "@/components/farma/FarmaFooter";
+import { getNartalisSession } from "@/lib/auth";
+import AnalyticsUserId from "@/components/auth/AnalyticsUserId";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,11 +23,13 @@ export const metadata: Metadata = {
   description: "Consulta información oficial de medicamentos basada en datos de la AEMPS. Busca medicamentos, consulta prospectos y encuentra información clara y fiable en Nartalis.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getNartalisSession();
+
   return (
     <html
       lang="es"
@@ -62,7 +66,9 @@ export default function RootLayout({
           />
         )}
       </head>
-      <body className="min-h-full flex flex-col">{children}
+      <body className="min-h-full flex flex-col">
+      <AnalyticsUserId userId={session?.id ?? null} />
+      {children}
       <FarmaFooter />
       <Analytics />
       </body>
