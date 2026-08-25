@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 import { getNartalisSession } from '@/lib/auth';
 import { cimaBreaker } from '@/lib/circuit-breaker';
-import { ingestPrincipleIfPresent } from '@/lib/pa-principle';
+import { ingestPrinciplesBatch, collectPaPairs } from '@/lib/pa-principle';
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
@@ -48,6 +48,12 @@ function normalizeSearch(q: string): string {
 // globales: source/source_page solo describen el punto de entrada.
 const SEARCH_SOURCES = ['home', 'medicine_page'] as const;
 type SearchSource = (typeof SEARCH_SOURCES)[number];
+
+// Ahorro Neon: con DISABLE_PROSPECT_INGEST=1 se corta la ingestión ATC/PA
+// secundaria del buscador (mismo gate que prospectos/[slug]/page.tsx:97).
+// Cuando está activa la ingestión, procesa todos los pares PA en lote (batch)
+// en vez de hacer una query por medicamento. upsertCacheBatch no se toca.
+const PRINCIPLE_INGEST_ENABLED = process.env.DISABLE_PROSPECT_INGEST !== '1';
 
 function parseSource(v: string | null): SearchSource {
   return (SEARCH_SOURCES as readonly string[]).includes(v || '') ? (v as SearchSource) : 'home';
@@ -342,15 +348,8 @@ export async function GET(request: NextRequest) {
         try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
-        for (const r of resultados) {
-          if (r.pactivos) {
-            for (const pa of r.pactivos.split(/,|\+/)) {
-              const trimmed = pa.trim();
-              if (trimmed) {
-                try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
-              }
-            }
-          }
+        if (PRINCIPLE_INGEST_ENABLED) {
+          try { await ingestPrinciplesBatch(collectPaPairs(resultados)); } catch { /* silent */ }
         }
         return respond({
           resultados,
@@ -363,15 +362,8 @@ export async function GET(request: NextRequest) {
         try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         revalidatePath('/sitemap.xml');
-        for (const r of resultados) {
-          if (r.pactivos) {
-            for (const pa of r.pactivos.split(/,|\+/)) {
-              const trimmed = pa.trim();
-              if (trimmed) {
-                try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
-              }
-            }
-          }
+        if (PRINCIPLE_INGEST_ENABLED) {
+          try { await ingestPrinciplesBatch(collectPaPairs(resultados)); } catch { /* silent */ }
         }
         return respond({ resultados, total: data.totalFilas || resultados.length, fallback: false });
     }
@@ -394,22 +386,15 @@ export async function GET(request: NextRequest) {
           try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
           await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
           revalidatePath('/sitemap.xml');
-          for (const r of retryResultados) {
-            if (r.pactivos) {
-              for (const pa of r.pactivos.split(/,|\+/)) {
-                const trimmed = pa.trim();
-                if (trimmed) {
-                  try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
-                }
-              }
-            }
-          }
-          return respond({
-            resultados: retryResultados,
-            total: retryData.totalFilas || retryResultados.length,
-            fallback: false,
-            suggestedCorrection: correctedBase,
-          });
+           if (PRINCIPLE_INGEST_ENABLED) {
+             try { await ingestPrinciplesBatch(collectPaPairs(retryResultados)); } catch { /* silent */ }
+           }
+           return respond({
+             resultados: retryResultados,
+             total: retryData.totalFilas || retryResultados.length,
+             fallback: false,
+             suggestedCorrection: correctedBase,
+           });
         }
       }
     }
@@ -442,15 +427,8 @@ export async function GET(request: NextRequest) {
                   try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
                   await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
                   revalidatePath('/sitemap.xml');
-                  for (const r of fuzzyResultados) {
-                    if (r.pactivos) {
-                      for (const pa of r.pactivos.split(/,|\+/)) {
-                        const trimmed = pa.trim();
-                        if (trimmed) {
-                          try { await ingestPrincipleIfPresent(trimmed, r.registro); } catch { /* silent */ }
-                        }
-                      }
-                    }
+                  if (PRINCIPLE_INGEST_ENABLED) {
+                    try { await ingestPrinciplesBatch(collectPaPairs(fuzzyResultados)); } catch { /* silent */ }
                   }
                   return respond({
                     resultados: fuzzyResultados,
