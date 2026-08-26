@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { requireEspacioUser, validateNregistro, validateNombre } from '@/lib/espacio'
 
@@ -17,13 +17,40 @@ async function resolveNombre(nregistro: string, clienteNombre: string): Promise<
 }
 
 // ─── Listar medicamentos guardados del usuario ────────────────
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await requireEspacioUser()
   if (!user) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
+  const url = req.nextUrl
+  const countOnly = url.searchParams.get('countOnly') === '1'
+  const limitParam = Number.parseInt(url.searchParams.get('limit') ?? '', 10)
+  const limit = Number.isNaN(limitParam) ? null : Math.min(100, Math.max(1, limitParam))
+
   try {
+    if (countOnly) {
+      const rows = await sql`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE is_favorite)::int AS favorites
+        FROM nartalis_user_medicamentos
+        WHERE user_id = ${user.id}
+      `
+      return NextResponse.json({ total: rows[0]?.total ?? 0, favorites: rows[0]?.favorites ?? 0 })
+    }
+
+    if (limit !== null) {
+      const medicamentos = await sql`
+        SELECT nregistro, nombre, is_favorite, created_at::text AS created_at
+        FROM nartalis_user_medicamentos
+        WHERE user_id = ${user.id}
+        ORDER BY created_at DESC
+        LIMIT ${limit}
+      `
+      return NextResponse.json({ medicamentos })
+    }
+
     const medicamentos = await sql`
       SELECT nregistro, nombre, is_favorite, created_at::text AS created_at
       FROM nartalis_user_medicamentos
