@@ -12,15 +12,17 @@ interface Props {
   createdAt?: string;
   showDate?: boolean;
   onToggleFavorite?: (nregistro: string) => void;
+  className?: string;
 }
 
-export default function V2MedCard({ nregistro, nombre, isFavorite, createdAt, showDate, onToggleFavorite }: Props) {
+export default function V2MedCard({ nregistro, nombre, isFavorite, createdAt, showDate, onToggleFavorite, className }: Props) {
   const slug = makeSlug(nombre, nregistro);
   const href = `/prospectos/${slug}`;
 
   return (
     <div
       style={V.medCard}
+      className={className}
       role="listitem"
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = V.c.primary;

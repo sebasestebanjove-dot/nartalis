@@ -43,7 +43,7 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
   const load = useCallback(async () => {
     try {
       const [medRes, countRes, histRes] = await Promise.all([
-        fetch('/api/espacio/medicamentos?limit=4'),
+        fetch('/api/espacio/medicamentos?limit=6'),
         fetch('/api/espacio/medicamentos?countOnly=1'),
         fetch('/api/espacio/historial?limit=7'),
       ]);
@@ -157,7 +157,7 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
                 />
               ) : (
                 <div style={V.medGrid} data-espacio-meds>
-                  {medicamentos.map((m) => (
+                  {medicamentos.map((m, i) => (
                     <V2MedCard
                       key={m.nregistro}
                       nregistro={m.nregistro}
@@ -166,6 +166,7 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
                       createdAt={m.created_at}
                       showDate
                       onToggleFavorite={handleToggleFavorite}
+                      className={i >= 4 ? 'hide-mobile' : undefined}
                     />
                   ))}
                 </div>
@@ -196,6 +197,9 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
           }
           [data-espacio-bottom] > div {
             grid-template-columns: 1fr !important;
+          }
+          [data-espacio-meds] .hide-mobile {
+            display: none !important;
           }
         }
         @media (min-width: 600px) and (max-width: 840px) {

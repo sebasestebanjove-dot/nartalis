@@ -389,6 +389,7 @@ export const V = {
     display: 'grid',
     gridTemplateColumns: 'repeat(2, 1fr)',
     gap: 10,
+    overflow: 'hidden' as const,
   } as CSSProperties,
 
   medGridInner: {
@@ -514,6 +515,8 @@ export const V = {
     color: 'inherit',
     borderRadius: radius.sm,
     transition: `background ${t.fast}`,
+    overflow: 'hidden' as const,
+    minWidth: 0,
   } as CSSProperties,
 
   favStar: {
@@ -530,10 +533,10 @@ export const V = {
     fontSize: 13,
     fontWeight: 500,
     color: c.text,
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
     lineHeight: 1.4,
+    overflowWrap: 'break-word' as const,
+    wordBreak: 'break-word' as const,
+    minWidth: 0,
   } as CSSProperties,
 
   favArrow: {
@@ -551,6 +554,8 @@ export const V = {
     borderRadius: radius.sm,
     transition: `background ${t.fast}`,
     borderBottom: `1px solid ${c.borderLight}`,
+    overflow: 'hidden' as const,
+    minWidth: 0,
   } as CSSProperties,
 
   histRowLast: {
@@ -579,9 +584,9 @@ export const V = {
     fontWeight: 500,
     color: c.text,
     lineHeight: 1.3,
-    overflow: 'hidden' as const,
-    textOverflow: 'ellipsis' as const,
-    whiteSpace: 'nowrap' as const,
+    overflowWrap: 'break-word' as const,
+    wordBreak: 'break-word' as const,
+    minWidth: 0,
   } as CSSProperties,
 
   histDate: {
