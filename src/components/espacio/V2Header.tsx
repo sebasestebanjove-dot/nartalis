@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Shield } from 'lucide-react';
 import LogoutButton from '@/components/auth/LogoutButton';
 import { V } from './V2Styles';
@@ -25,7 +26,14 @@ export default function V2Header({ name, role, plan }: Props) {
     <div>
       <div style={V.heroTop}>
         <div style={V.heroBrand}>
-          <div style={V.heroBrandMark}>N</div>
+          <Image
+            src="/logos/logo_ok_2026.png"
+            alt="Logo Nartalis"
+            width={1254}
+            height={1254}
+            sizes="30px"
+            style={{ width: 30, height: 30, flexShrink: 0, borderRadius: V.heroBrandMark.borderRadius }}
+          />
           <span style={V.heroBrandText}>Nartalis</span>
         </div>
         <div style={V.heroControls}>

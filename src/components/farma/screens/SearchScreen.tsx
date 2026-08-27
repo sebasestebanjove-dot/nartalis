@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, HeartPulse, Users } from 'lucide-react';
 import PersonalSpaceCard from '../PersonalSpaceCard';
 import { track } from '@/lib/analytics';
@@ -390,7 +391,18 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
     <div style={S.container}>
       {/* ── Hero ── */}
       <div style={S.hero}>
-        <span className="farma-hero-brand" style={S.brand}>Nartalis</span>
+        <div style={S.branding}>
+          <Image
+            src="/logos/logo_ok_2026.png"
+            alt="Logo Nartalis"
+            width={1254}
+            height={1254}
+            sizes="(max-width: 480px) 40px, (max-width: 768px) 44px, 50px"
+            style={{ width: 'auto', height: 'auto', flexShrink: 0 }}
+            priority
+          />
+          <span className="farma-hero-brand" style={S.brand}>Nartalis</span>
+        </div>
         <h1 className="farma-hero-h1" style={S.h1}>Información oficial de medicamentos y prospectos</h1>
         <p className="farma-hero-sub" style={S.subtitle}>
           Busca cualquier medicamento y consulta su prospecto y ficha técnica con información oficial de la AEMPS (CIMA), siempre actualizada.
@@ -544,12 +556,18 @@ const S = {
     maxWidth: 620,
     marginBottom: '2.5rem',
   },
+  branding: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 10,
+    marginBottom: '0.6rem',
+  },
   brand: {
-    display: 'block',
+    display: 'inline',
     fontSize: 34,
     fontWeight: 800,
     color: '#60A5FA',
-    marginBottom: '0.4rem',
     letterSpacing: '0.04em',
     textTransform: 'uppercase' as const,
   },
