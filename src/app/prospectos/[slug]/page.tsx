@@ -1,20 +1,33 @@
 import { notFound, permanentRedirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { after } from 'next/server';
 import { cache } from 'react';
 import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
-import { countByLetter } from '@/lib/medicamentos';
 import { ingestPrincipleIfPresent } from '@/lib/pa-principle';
-import { resolveMedicamentoPaLinks } from '@/lib/pa-resolve';
+import { getCanonicalPaLinks, getRelatedByAtc, getRelatedByPa, getLetterCount } from '@/lib/prospect-cache';
 import ProspectoView from '@/components/farma/screens/ProspectoView';
 import type { Medicamento } from '@/components/farma/types';
 import type { PaLink } from '@/components/farma/screens/ProspectoView';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';
 
+// ISR: la ficha pública se sirve desde HTML cacheado y se regenera en 2º plano.
+// El revalidate efectivo de la ruta = min(revalidate ruta, fetch CIMA, unstable_cache) = 3600.
+export const revalidate = 3600;
+
 interface Props {
   params: Promise<{ slug: string }>;
+}
+
+// REQUERIDO para ISR en rutas de segmento dinámico (Previous Model): sin
+// generateStaticParams la ruta se renderiza dinámicamente (ƒ / no-store)
+// aunque haya `export const revalidate`. Devolver array vacío => prerender 0
+// en build y ON-DEMAND ISR: la primera visita genera y cachea; los siguientes
+// requests se sirven desde el cache de página con revalidate 3600s.
+export async function generateStaticParams(): Promise<{ slug: string }[]> {
+  return [];
 }
 
 const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | null> => {
@@ -86,16 +99,22 @@ const fetchMedicamentoByNregistro = cache(async (nregistro: string): Promise<Med
   try {
     const res = await fetch(
       `https://cima.aemps.es/cima/rest/medicamento?nregistro=${encodeURIComponent(nregistro)}`,
-      { next: { revalidate: 86400 }, signal: AbortSignal.timeout(15000) },
+      { next: { revalidate: 86400, tags: ['cima', `cima:${nregistro}`] }, signal: AbortSignal.timeout(15000) },
     );
     if (!res.ok) return null;
     const raw = await res.json();
     if (!raw.nombre) return null;
     // Ingesta ATC best-effort (no bloquea el renderizado).
     // FASE 1 (ahorro Neon): se desactiva en producción con DISABLE_PROSPECT_INGEST=1.
+    // La env sigue siendo la protección definitiva (DISABLE_PROSPECT_INGEST=1 => 0 escrituras).
+    // Se aplaza a after(): separa el escritura/ingesta del path de lectura; no bloquea
+    // el render y, al ser la página ISR, nunca se ejecuta en un cache HIT (solo en
+    // generación/revalidación).
     if (process.env.DISABLE_PROSPECT_INGEST !== '1') {
-      ingestAtcCache(raw, nregistro).catch(e => console.error('ATC ingest error:', e?.message || e));
-      ingestPaCache(raw, nregistro).catch(e => console.error('PA ingest error:', e?.message || e));
+      after(() => {
+        ingestAtcCache(raw, nregistro).catch(e => console.error('ATC ingest error:', e?.message || e));
+        ingestPaCache(raw, nregistro).catch(e => console.error('PA ingest error:', e?.message || e));
+      });
     }
     return {
       nombre: raw.nombre || '',
@@ -269,35 +288,25 @@ export default async function ProspectoPage({ params }: Props) {
 
     const principio = m.pactivos || m.principiosActivos?.[0]?.nombre || null;
 
-    // Canonical cross-links: resolve simple indexable PAs (BLOQUE 5).
+    // Canonical cross-links: resolve simple indexable PAs (BLOQUE 5). Cacheable.
     let canonicalPaLinks: PaLink[] = [];
     try {
-      canonicalPaLinks = await resolveMedicamentoPaLinks(
+      canonicalPaLinks = await getCanonicalPaLinks(
         principio || null,
         (m.principiosActivos || []).map((p) => p.nombre)
       );
     } catch { /* best-effort */ }
 
-    // Cross-link queries: related drugs (same PA, same ATC L4). No N+1.
+    // Cross-link queries: related drugs (same PA, same ATC L4). No N+1. Cacheable por medicamento.
   let relatedPa: { nombre: string; nregistro: string }[] = [];
   let relatedAtc: { nombre: string; nregistro: string }[] = [];
   const atcL4Code = m.atcs?.find(a => a.nivel === 4)?.codigo;
   try {
     if (principio) {
-      relatedPa = await sql`
-        SELECT DISTINCT fc.nombre, fc.nregistro
-        FROM pa_cache pa JOIN farma_name_cache fc ON pa.nregistro = fc.nregistro
-        WHERE pa.principio = ${principio.toLowerCase()} AND pa.nregistro != ${m.registro}
-        ORDER BY fc.nombre LIMIT 5
-      ` as { nombre: string; nregistro: string }[];
+      relatedPa = await getRelatedByPa(m.registro, principio);
     }
     if (atcL4Code) {
-      relatedAtc = await sql`
-        SELECT DISTINCT fc.nombre, fc.nregistro
-        FROM atc_cache atc JOIN farma_name_cache fc ON atc.nregistro = fc.nregistro
-        WHERE atc.code = ${atcL4Code} AND atc.nregistro != ${m.registro}
-        ORDER BY fc.nombre LIMIT 5
-      ` as { nombre: string; nregistro: string }[];
+      relatedAtc = await getRelatedByAtc(m.registro, atcL4Code);
     }
   } catch { /* best-effort */ }
 
@@ -337,7 +346,7 @@ export default async function ProspectoPage({ params }: Props) {
   let letter: string | null = null;
   if (letterCandidate) {
     try {
-      const c = await countByLetter(letterCandidate);
+      const c = await getLetterCount(letterCandidate);
       if (c > 0) letter = letterCandidate;
     } catch { /* best-effort: sin letra, breadcrumb de 3 niveles */ }
   }
