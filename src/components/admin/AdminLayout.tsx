@@ -2,15 +2,16 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { LayoutDashboard, Users, Search, Pill, Activity, ArrowLeft } from 'lucide-react'
+import { LayoutDashboard, Users, Search, Pill, Activity, BarChart3, ArrowLeft } from 'lucide-react'
 import type { PublicSessionUser } from '@/lib/auth'
 import AdminDashboardView from './AdminDashboardView'
 import AdminUsersView from './AdminUsersView'
 import AdminSearchesView from './AdminSearchesView'
 import AdminMedsView from './AdminMedsView'
 import AdminActivityView from './AdminActivityView'
+import AdminAnalyticsView from './AdminAnalyticsView'
 
-export type AdminTab = 'resumen' | 'usuarios' | 'busquedas' | 'medicamentos' | 'actividad'
+export type AdminTab = 'resumen' | 'usuarios' | 'busquedas' | 'medicamentos' | 'actividad' | 'analytics'
 
 const TABS: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
   { key: 'resumen', label: 'Resumen', icon: <LayoutDashboard size={16} /> },
@@ -18,6 +19,7 @@ const TABS: { key: AdminTab; label: string; icon: React.ReactNode }[] = [
   { key: 'busquedas', label: 'Búsquedas', icon: <Search size={16} /> },
   { key: 'medicamentos', label: 'Medicamentos', icon: <Pill size={16} /> },
   { key: 'actividad', label: 'Actividad', icon: <Activity size={16} /> },
+  { key: 'analytics', label: 'Analytics', icon: <BarChart3 size={16} /> },
 ]
 
 const S = {
@@ -148,6 +150,7 @@ export default function AdminLayout({ sessionUser }: { sessionUser: PublicSessio
         {tab === 'busquedas' && <AdminSearchesView />}
         {tab === 'medicamentos' && <AdminMedsView />}
         {tab === 'actividad' && <AdminActivityView />}
+        {tab === 'analytics' && <AdminAnalyticsView />}
       </main>
     </div>
   )
