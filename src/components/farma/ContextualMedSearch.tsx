@@ -85,7 +85,7 @@ export default function ContextualMedSearch({ source = 'medicine_page', heading 
     if (source === 'medicine_page') {
       track('seo_to_second_medicine', { position });
     }
-    router.push(`/prospectos/${makeSlug(m.nombre, m.registro)}`);
+    router.push(`/prospectos/${makeSlug(m.nombre, m.registro)}?source=contextual`);
   };
 
   return (

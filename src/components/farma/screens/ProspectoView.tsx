@@ -12,7 +12,9 @@ import SaveMedButton from '../SaveMedButton';
 import ContextualMedSearch from '../ContextualMedSearch';
 import { styles } from './styles';
 import { slugify } from '@/lib/slug';
-import { track } from '@/lib/analytics';
+import { registerMedView } from '@/lib/med-tracking';
+
+const SEARCH_ENGINE_RE = /(^|\.)(google|bing|yahoo|duckduckgo|ecosia|startpage|qwant|seznam|yandex|baidu)\./i;
 
 export type PaLink = { slug: string; nombre: string };
 
@@ -100,7 +102,7 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc, cano
   const [speaking, setSpeaking] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
-  const viewTracked = useRef(false);
+  const lastHandledRegistro = useRef<string | null>(null);
   const m = medicamento;
 
   const alertChips = useAlerts(m);
@@ -117,10 +119,26 @@ export default function ProspectoView({ medicamento, relatedPa, relatedAtc, cano
   }, [showLegend]);
 
   useEffect(() => {
-    if (m.registro && !viewTracked.current) {
-      viewTracked.current = true;
-      track('medicine_view', { nregistro: m.registro, nombre: m.nombre });
+    if (!m.registro) return;
+    if (lastHandledRegistro.current === m.registro) return;
+    lastHandledRegistro.current = m.registro;
+
+    let source = 'internal';
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('source') === 'contextual') {
+        source = 'contextual';
+      } else {
+        const ref = document.referrer || '';
+        try {
+          const refHost = new URL(ref).hostname;
+          if (SEARCH_ENGINE_RE.test(refHost)) {
+            source = 'organic';
+          }
+        } catch { /* referrer vacío o inválido */ }
+      }
     }
+    registerMedView(m.registro, m.nombre, source);
   }, [m.registro, m.nombre]);
 
   const textSummary = [

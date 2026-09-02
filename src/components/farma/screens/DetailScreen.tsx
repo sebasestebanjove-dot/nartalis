@@ -13,6 +13,7 @@ import { styles } from './styles';
 import ContextualMedSearch from '../ContextualMedSearch';
 import { makeSlug } from '@/lib/slug';
 import type { PublicSessionUser } from '@/lib/auth';
+import { registerMedView } from '@/lib/med-tracking';
 
 interface Props {
   medicamento: Medicamento;
@@ -104,6 +105,7 @@ export default function DetailScreen({ medicamento, onBack, loading, onDAtcDetec
   const [speaking, setSpeaking] = useState(false);
   const [showLegend, setShowLegend] = useState(false);
   const legendRef = useRef<HTMLDivElement>(null);
+  const lastHandledRegistro = useRef<string | null>(null);
   const m = medicamento;
 
   const alertChips = useAlerts(m);
@@ -126,6 +128,13 @@ export default function DetailScreen({ medicamento, onBack, loading, onDAtcDetec
   }, [hasDAtc, onDAtcDetected]);
   // Cached reference to avoid re-creating on every render
   // (used to persist the close callback reference)
+
+  useEffect(() => {
+    if (!m.registro) return;
+    if (lastHandledRegistro.current === m.registro) return;
+    lastHandledRegistro.current = m.registro;
+    registerMedView(m.registro, m.nombre, 'internal');
+  }, [m.registro, m.nombre]);
 
   const textSummary = [
     m.nombre,
