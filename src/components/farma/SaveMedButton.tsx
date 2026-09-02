@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { Star, Bookmark, BookmarkCheck } from 'lucide-react'
 import Link from 'next/link'
 import { track } from '@/lib/analytics'
@@ -38,6 +38,35 @@ export default function SaveMedButton({
   const [saving, setSaving] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const pendingRef = useRef(false)
+
+  // Inicializa estado (sesión + guardado/favorito) desde el cliente para no bloquear
+  // el renderizado estático/ISR de la ficha con una lectura de cookies en el server.
+  useEffect(() => {
+    let cancelled = false
+    async function loadInitialState() {
+      try {
+        const res = await fetch('/api/auth/session')
+        if (!res.ok) return
+        const data = await res.json()
+        if (!data.authenticated || cancelled) return
+        const user = data.user as PublicSessionUser | undefined
+        if (!user) return
+        setSessionUser(user)
+        try {
+          const sr = await fetch(`/api/espacio/medicamentos/${encodeURIComponent(nregistro)}`)
+          if (sr.ok) {
+            const s = await sr.json()
+            if (!cancelled && s.saved) {
+              setIsSaved(true)
+              setIsFavorite(!!s.is_favorite)
+            }
+          }
+        } catch { /* silencioso */ }
+      } catch { /* silencioso */ }
+    }
+    loadInitialState()
+    return () => { cancelled = true }
+  }, [nregistro])
 
   const handleSaveClick = useCallback(async () => {
     if (saving || isSaved) return

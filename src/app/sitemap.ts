@@ -12,31 +12,26 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: SITE_URL,
-      lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 1,
     },
     {
       url: `${SITE_URL}/medicamentos`,
-      lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.9,
     },
     {
       url: `${SITE_URL}/preguntas-frecuentes`,
-      lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.5,
     },
     {
       url: `${SITE_URL}/acerca-de`,
-      lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.5,
     },
     {
       url: `${SITE_URL}/metodologia`,
-      lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.5,
     },
@@ -48,7 +43,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const l of letters) {
     letterPages.push({
       url: `${SITE_URL}/medicamentos/${l.letter.toLowerCase()}`,
-      lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.8,
     });
@@ -56,7 +50,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (let p = 2; p <= l.pages; p++) {
       letterPages.push({
         url: `${SITE_URL}/medicamentos/${l.letter.toLowerCase()}/${p}`,
-        lastModified: new Date(),
         changeFrequency: 'daily',
         priority: 0.6,
       });
@@ -71,7 +64,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const drugPages: MetadataRoute.Sitemap = rows.map(row => ({
     url: `${SITE_URL}/prospectos/${makeSlug(row.nombre, row.nregistro)}`,
-    lastModified: new Date(),
     changeFrequency: 'weekly' as const,
     priority: 0.8,
   }));
@@ -106,19 +98,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const atcPages: MetadataRoute.Sitemap = [
     {
       url: `${SITE_URL}/atc`,
-      lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 0.7,
     },
     ...atcL3.map(r => ({
       url: `${SITE_URL}/atc/${r.code}`,
-      lastModified: new Date(),
       changeFrequency: 'weekly' as const,
       priority: 0.7,
     })),
     ...atcL4.map(r => ({
       url: `${SITE_URL}/atc/${r.code}`,
-      lastModified: new Date(),
       changeFrequency: 'weekly' as const,
       priority: 0.7,
     })),
@@ -128,7 +117,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const seoPa = await listPaSeo(250);
   const t1Pages: MetadataRoute.Sitemap = seoPa.map(r => ({
     url: `${SITE_URL}/medicamentos/para-que-sirve/${r.slug}`,
-    lastModified: new Date(),
     changeFrequency: 'weekly' as const,
     priority: 0.6,
   }));
@@ -137,7 +125,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const seoAtc = await listAtcSeo(20, 120);
   const t2Pages: MetadataRoute.Sitemap = seoAtc.map(r => ({
     url: `${SITE_URL}/medicamentos/grupos-terapeuticos/${r.code}`,
-    lastModified: new Date(),
     changeFrequency: 'weekly' as const,
     priority: 0.6,
   }));

@@ -4,7 +4,6 @@ import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import FarmaFooter from "@/components/farma/FarmaFooter";
-import { getNartalisSession } from "@/lib/auth";
 import AnalyticsUserId from "@/components/auth/AnalyticsUserId";
 
 const geistSans = Geist({
@@ -28,8 +27,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getNartalisSession();
-
   return (
     <html
       lang="es"
@@ -67,7 +64,7 @@ export default async function RootLayout({
         )}
       </head>
       <body className="min-h-full flex flex-col">
-      <AnalyticsUserId userId={session?.id ?? null} />
+      <AnalyticsUserId />
       {children}
       <FarmaFooter />
       <Analytics />

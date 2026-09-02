@@ -6,6 +6,34 @@ interface RouteCtx {
   params: Promise<{ nregistro: string }>
 }
 
+// ─── Consultar si un medicamento está guardado y favorito (para el usuario actual) ──
+export async function GET(_req: NextRequest, { params }: RouteCtx) {
+  const user = await requireEspacioUser()
+  if (!user) {
+    return NextResponse.json({ saved: false, is_favorite: false })
+  }
+
+  const { nregistro: rawNregistro } = await params
+  const nr = validateNregistro(rawNregistro)
+  if (!nr.ok) {
+    return NextResponse.json({ saved: false, is_favorite: false })
+  }
+
+  try {
+    const rows = await sql`
+      SELECT is_favorite FROM nartalis_user_medicamentos
+      WHERE user_id = ${user.id} AND nregistro = ${nr.nregistro}
+      LIMIT 1
+    `
+    if (rows.length === 0) {
+      return NextResponse.json({ saved: false, is_favorite: false })
+    }
+    return NextResponse.json({ saved: true, is_favorite: rows[0].is_favorite ?? false })
+  } catch {
+    return NextResponse.json({ saved: false, is_favorite: false })
+  }
+}
+
 // ─── Marcar / desmarcar favorito sobre un medicamento guardado ──
 export async function PATCH(req: NextRequest, { params }: RouteCtx) {
   const user = await requireEspacioUser()
