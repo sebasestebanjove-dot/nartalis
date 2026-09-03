@@ -91,6 +91,14 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
 
   const favoritos = medicamentos.filter((m) => m.is_favorite);
 
+  const focusSpaceSearch = () => {
+    const el = document.getElementById('espacio-search-input');
+    if (el) {
+      el.focus();
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   return (
     <div style={V.page}>
       {welcome && (
@@ -101,17 +109,18 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
             </div>
             <div style={V.welcomeTitle}>Tu espacio personal está listo</div>
             <div style={V.welcomeDesc}>
-              Hemos creado tu cuenta Nartalis. Tu espacio está preparado para empezar.
+              Hemos creado tu cuenta Nartalis. Tu espacio está preparado para guardar tus medicamentos y consultarlos cuando quieras.
             </div>
-            <Link
-              href="/"
-              style={{ ...V.emptyCta, marginTop: 14 }}
+            <button
+              type="button"
+              onClick={focusSpaceSearch}
+              style={{ ...V.emptyCta, marginTop: 14, border: 'none', fontFamily: V.font }}
               onMouseEnter={(e) => { e.currentTarget.style.background = V.c.primaryMuted; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = V.c.primaryLight; }}
             >
               <Search size={14} />
-              Empezar a buscar
-            </Link>
+              Buscar mi primer medicamento
+            </button>
           </div>
         </div>
       )}
@@ -150,10 +159,10 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
               {medicamentos.length === 0 ? (
                 <V2Empty
                   icon={<Pill size={22} />}
-                  title="Aún no has guardado medicamentos"
-                  description="Guarda tus medicamentos desde su ficha para tenerlos siempre a mano."
-                  ctaLabel="Buscar medicamentos"
-                  ctaHref="/"
+                  title="Tus medicamentos, siempre a mano"
+                  description="Guarda tus medicamentos y consulta su prospecto oficial cuando quieras, todo desde un solo lugar."
+                  ctaLabel="Buscar mi primer medicamento"
+                  onCta={focusSpaceSearch}
                 />
               ) : (
                 <div style={V.medGrid} data-espacio-meds>
@@ -175,13 +184,15 @@ export default function EspacioDashboard({ name, welcome = false, role, plan }: 
 
             <div style={V.divider} />
 
-            {/* Favoritos + Historial — dos columnas en desktop */}
-            <div style={V.section} data-espacio-bottom>
-              <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 24, alignItems: 'start' }}>
-                <V2Favorites items={favoritos} />
-                <V2History items={consultas} />
+            {/* Favoritos + Historial — dos columnas en desktop (solo con datos) */}
+            {favoritos.length > 0 || consultas.length > 0 ? (
+              <div style={V.section} data-espacio-bottom>
+                <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 24, alignItems: 'start' }}>
+                  <V2Favorites items={favoritos} />
+                  <V2History items={consultas} />
+                </div>
               </div>
-            </div>
+            ) : null}
           </>
         )}
 
