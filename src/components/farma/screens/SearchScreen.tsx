@@ -3,9 +3,11 @@
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, HeartPulse, Users } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, Mic, MicOff, Loader2, AlertTriangle, ShieldCheck, HeartPulse, Users, Pill } from 'lucide-react';
 import PersonalSpaceCard from '../PersonalSpaceCard';
 import { track } from '@/lib/analytics';
+import { makeSlug } from '@/lib/slug';
 import type { PublicSessionUser } from '@/lib/auth';
 
 interface Props {
@@ -59,7 +61,15 @@ interface SpeechRecognitionAlternative {
 
 type MicStatus = 'idle' | 'connecting' | 'listening' | 'recording' | 'blocked' | 'error';
 
+interface Suggestion {
+  nombre: string;
+  registro: string;
+}
+
 const VOICE_TIMEOUT_MS = 8000;
+const SUGGEST_MIN_CHARS = 2;
+const SUGGEST_MAX_RESULTS = 8;
+const SUGGEST_DEBOUNCE_MS = 300;
 
 export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSpaceCta, onLoginCta, sessionUser = null }: Props) {
   const [query, setQuery] = useState(initialQuery);
@@ -79,6 +89,99 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   const transcriptRef = useRef('');
   const voiceActiveRef = useRef(false);
   onSearchRef.current = onSearch;
+
+  const router = useRouter();
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const suggestTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suggestAbortRef = useRef<AbortController | null>(null);
+  const suggestSeqRef = useRef(0);
+  const suggestWrapRef = useRef<HTMLDivElement>(null);
+
+  const closeSuggest = () => {
+    suggestSeqRef.current += 1;
+    if (suggestAbortRef.current) { try { suggestAbortRef.current.abort(); } catch {} suggestAbortRef.current = null; }
+    setSuggestions([]);
+    setSuggestOpen(false);
+    setActiveIndex(-1);
+  };
+
+  const fetchSuggestions = async (q: string) => {
+    const seq = suggestSeqRef.current + 1;
+    suggestSeqRef.current = seq;
+    if (suggestAbortRef.current) { try { suggestAbortRef.current.abort(); } catch {} }
+    const controller = new AbortController();
+    suggestAbortRef.current = controller;
+    setSuggestLoading(true);
+    try {
+      const r = await fetch(`/api/farma/suggest?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+      if (seq !== suggestSeqRef.current) return;
+      const data = await r.json();
+      if (seq !== suggestSeqRef.current) return;
+      const list: Suggestion[] = ((data.resultados || []) as Suggestion[]).slice(0, SUGGEST_MAX_RESULTS);
+      setSuggestions(list);
+      setSuggestOpen(true);
+      setActiveIndex(-1);
+    } catch {
+      if (seq === suggestSeqRef.current) { setSuggestions([]); setSuggestOpen(false); setActiveIndex(-1); }
+    } finally {
+      if (seq === suggestSeqRef.current) setSuggestLoading(false);
+    }
+  };
+
+  const handleInputChange = (v: string) => {
+    setQuery(v);
+    if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+    const trimmed = v.trim();
+    if (trimmed.length < SUGGEST_MIN_CHARS) {
+      suggestSeqRef.current += 1;
+      setSuggestions([]);
+      setSuggestOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+    suggestTimerRef.current = setTimeout(() => { fetchSuggestions(trimmed); }, SUGGEST_DEBOUNCE_MS);
+  };
+
+  const selectSuggestion = (item: Suggestion) => {
+    closeSuggest();
+    setQuery('');
+    router.push(`/prospectos/${makeSlug(item.nombre, item.registro)}`);
+  };
+
+  const handleSuggestionKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (suggestions.length > 0) { setActiveIndex((i) => (i + 1) % suggestions.length); setSuggestOpen(true); }
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (suggestions.length > 0) { setActiveIndex((i) => (i <= 0 ? suggestions.length - 1 : i - 1)); setSuggestOpen(true); }
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (suggestOpen) { closeSuggest(); return; }
+    }
+    if (e.key === 'Enter') {
+      if (suggestOpen && activeIndex >= 0 && activeIndex < suggestions.length) {
+        e.preventDefault();
+        selectSuggestion(suggestions[activeIndex]);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => { if (suggestWrapRef.current && !suggestWrapRef.current.contains(e.target as Node)) { closeSuggest(); } };
+    document.addEventListener('mousedown', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      if (suggestTimerRef.current) clearTimeout(suggestTimerRef.current);
+      if (suggestAbortRef.current) { try { suggestAbortRef.current.abort(); } catch {} }
+    };
+  }, []);
 
   const doVoiceSearch = (transcript: string) => {
     const text = transcript.trim();
@@ -351,7 +454,19 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSearch();
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
+      handleSuggestionKeyDown(e);
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (suggestOpen && activeIndex >= 0 && activeIndex < suggestions.length) {
+        e.preventDefault();
+        selectSuggestion(suggestions[activeIndex]);
+        return;
+      }
+      closeSuggest();
+      handleSearch();
+    }
   };
 
   const getMicIcon = () => {
@@ -410,7 +525,7 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
       </div>
 
       {/* ── Search Box ── */}
-      <div style={S.searchWrap}>
+      <div ref={suggestWrapRef} style={S.searchWrap}>
         <h2 style={S.h2}>Encuentra información sobre tus medicamentos</h2>
         <div style={S.searchBox}>
           <svg style={S.searchIcon} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
@@ -422,11 +537,21 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
             type="text"
             placeholder="Busca tu prospecto oficial..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             autoFocus
+            autoComplete="off"
             aria-label="Buscar medicamento"
+            role="combobox"
+            aria-expanded={suggestOpen}
+            aria-controls="farma-suggest-dropdown"
+            aria-autocomplete="list"
           />
+          {suggestLoading && (
+            <div style={S.searchLoader} aria-hidden="true">
+              <Loader2 size={18} className="farma-spin" color="#3B82F6" />
+            </div>
+          )}
           <button
             style={S.searchBtn}
             onClick={handleSearch}
@@ -435,6 +560,30 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
           >
             <Search size={22} />
           </button>
+          {suggestOpen && suggestions.length > 0 && (
+            <div id="farma-suggest-dropdown" style={S.dropdown} role="listbox" aria-label="Sugerencias de medicamentos">
+              {suggestions.map((item, i) => (
+                <div
+                  key={item.registro}
+                  role="option"
+                  aria-selected={i === activeIndex}
+                  onMouseEnter={() => setActiveIndex(i)}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); selectSuggestion(item); }}
+                  style={{ ...S.dropItem, background: i === activeIndex ? '#EFF6FF' : 'transparent' }}
+                >
+                  <div style={S.dropItemIcon}>
+                    <Pill size={16} color="#3B82F6" />
+                  </div>
+                  <div style={S.dropItemName}>{item.nombre}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {suggestOpen && suggestions.length === 0 && !suggestLoading && query.trim().length >= SUGGEST_MIN_CHARS && (
+            <div id="farma-suggest-dropdown" style={S.dropdownEmpty}>
+              No se encontraron medicamentos con ese nombre.
+            </div>
+          )}
         </div>
       </div>
 
@@ -610,6 +759,70 @@ const S = {
     background: '#FFFFFF',
     border: '1px solid rgba(0,0,0,0.06)',
     boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+    position: 'relative' as const,
+  },
+  searchLoader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  dropdown: {
+    position: 'absolute' as const,
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 8,
+    borderRadius: 14,
+    background: '#FFFFFF',
+    border: '1px solid rgba(0,0,0,0.08)',
+    boxShadow: '0 16px 36px rgba(0,0,0,0.4)',
+    overflow: 'hidden',
+    zIndex: 30,
+    maxHeight: 320,
+    overflowY: 'auto' as const,
+  },
+  dropdownEmpty: {
+    position: 'absolute' as const,
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 8,
+    borderRadius: 14,
+    background: '#FFFFFF',
+    border: '1px solid rgba(0,0,0,0.08)',
+    boxShadow: '0 16px 36px rgba(0,0,0,0.4)',
+    zIndex: 30,
+    padding: '1rem 1.1rem',
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center' as const,
+  },
+  dropItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '0.7rem 0.9rem',
+    cursor: 'pointer',
+    borderBottom: '1px solid #F1F5F9',
+  },
+  dropItemIcon: {
+    width: 34,
+    height: 34,
+    minWidth: 34,
+    borderRadius: 10,
+    background: 'rgba(59,130,246,0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  dropItemName: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: '#1E293B',
+    lineHeight: 1.35,
+    overflowWrap: 'break-word' as const,
   },
   searchIcon: {
     width: 22,
