@@ -116,27 +116,18 @@ export default function AuthFlow({ initialMode = 'register', onSuccess, onBack, 
     window.location.href = '/api/auth/google';
   }
 
-  async function handleApple() {
-    track(mode === 'register' ? 'registration_started' : 'login_started', { provider: 'apple' });
-    setStatus('notice');
-    setMessage('Apple estará disponible próximamente.');
-  }
-
   return (
     <form onSubmit={handleSubmit} style={styles.card}>
-      <h1 id={titleId} style={styles.title}>{mode === 'register' ? 'Crea tu espacio personal' : 'Bienvenido de nuevo'}</h1>
+      <h1 id={titleId} style={styles.title}>{mode === 'register' ? 'Crea tu botiquín digital' : 'Bienvenido de nuevo'}</h1>
       <p style={styles.subtitle}>
         {mode === 'register'
-          ? 'Guarda tus medicamentos, organiza tu botiquín y ten tu información siempre contigo.'
+          ? 'Guarda tus medicamentos y ten su información siempre a mano.'
           : 'Accede a tu espacio personal para gestionar tus medicamentos y preferencias.'}
       </p>
 
       <div style={styles.providerRow}>
         <button type="button" style={styles.providerBtn} onClick={handleGoogle} disabled={loading}>
           Continuar con Google
-        </button>
-        <button type="button" style={styles.providerBtn} onClick={handleApple} disabled={loading}>
-          Continuar con Apple
         </button>
       </div>
 
@@ -195,7 +186,7 @@ export default function AuthFlow({ initialMode = 'register', onSuccess, onBack, 
       {status === 'notice' && <p style={styles.notice}>{message}</p>}
 
       <button type="submit" style={{ ...styles.submitBtn, ...(loading ? styles.submitBtnDisabled : {}) }} disabled={loading}>
-        {mode === 'register' ? 'Crear mi espacio gratis' : 'Iniciar sesión'}
+        {mode === 'register' ? 'Crear mi botiquín gratis' : 'Iniciar sesión'}
       </button>
 
       <p style={styles.legal}>
@@ -216,7 +207,7 @@ export default function AuthFlow({ initialMode = 'register', onSuccess, onBack, 
           <>
             ¿No tienes una cuenta?{' '}
             <button type="button" style={styles.switchLink} onClick={() => switchMode('register')}>
-              Crea tu espacio gratis
+              Crea tu botiquín gratis
             </button>
           </>
         )}

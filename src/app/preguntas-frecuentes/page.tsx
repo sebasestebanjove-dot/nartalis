@@ -68,7 +68,7 @@ const faqs = [
   },
   {
     q: '¿Es necesario registrarse para usar Nartalis?',
-    a: 'No. El buscador es completamente gratuito y no requiere registro ni inicio de sesión. Puedes consultar cualquier medicamento de forma anónima.',
+    a: 'No es necesario para consultar. El buscador y los prospectos son gratuitos y puedes consultarlos sin registro ni inicio de sesión. Si creas tu <strong style={S.strong}>botiquín gratuito</strong>, podrás guardar los medicamentos que consultas para tenerlos siempre a mano en tu Espacio Personal.',
   },
   {
     q: '¿Qué navegadores y dispositivos son compatibles?',

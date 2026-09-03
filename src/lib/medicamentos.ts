@@ -63,6 +63,14 @@ export function catalogMetadata(title: string, description: string, canonical: s
       siteName: 'Nartalis',
       locale: 'es_ES',
       type: 'website',
+      images: [
+        {
+          url: '/logos/logo_ok_2026.png',
+          width: 1254,
+          height: 1254,
+          alt: 'Nartalis',
+        },
+      ],
     },
     twitter: {
       card: 'summary_large_image' as const,

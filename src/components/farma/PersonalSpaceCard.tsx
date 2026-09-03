@@ -67,9 +67,9 @@ export default function PersonalSpaceCard({ onCta, onLoginCta, sessionUser = nul
             onClick={handleClick}
             style={S.cta}
             role="button"
-            aria-label="Crear mi espacio gratis"
+            aria-label="Crear mi botiquín gratis"
           >
-            Crear mi espacio gratis
+            Crear mi botiquín gratis
           </a>
           <div style={S.loginRow}>
             ¿Ya tienes una cuenta?{' '}

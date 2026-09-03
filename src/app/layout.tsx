@@ -20,6 +20,19 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://nartalis.com'),
   title: "Nartalis — Información oficial de medicamentos | AEMPS",
   description: "Consulta información oficial de medicamentos basada en datos de la AEMPS. Busca medicamentos, consulta prospectos y encuentra información clara y fiable en Nartalis.",
+  openGraph: {
+    siteName: 'Nartalis',
+    locale: 'es_ES',
+    type: 'website',
+    images: [
+      {
+        url: '/logos/logo_ok_2026.png',
+        width: 1254,
+        height: 1254,
+        alt: 'Nartalis',
+      },
+    ],
+  },
 };
 
 export default async function RootLayout({

@@ -252,6 +252,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: canonical,
       title,
       description,
+      images: [
+        {
+          url: '/logos/logo_ok_2026.png',
+          width: 1254,
+          height: 1254,
+          alt: 'Nartalis',
+        },
+      ],
     },
     twitter: {
       card: 'summary_large_image',
