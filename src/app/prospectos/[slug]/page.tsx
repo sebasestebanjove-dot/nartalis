@@ -21,13 +21,26 @@ interface Props {
   params: Promise<{ slug: string }>;
 }
 
-// REQUERIDO para ISR en rutas de segmento dinámico (Previous Model): sin
-// generateStaticParams la ruta se renderiza dinámicamente (ƒ / no-store)
-// aunque haya `export const revalidate`. Devolver array vacío => prerender 0
-// en build y ON-DEMAND ISR: la primera visita genera y cachea; los siguientes
-// requests se sirven desde el cache de página con revalidate 3600s.
+// Prerender estático del catálogo: las fichas conocidas (farma_name_cache +
+// makeSlug, la misma fuente que el sitemap) se generan en build → Vercel las
+// sirve desde CDN sin ejecutar Function. La revalidación ISR (revalidate =
+// 86400) refresca en segundo plano. Slugs desconocidos siguen generándose
+// on-demand (dynamicParams por defecto) e incluyen su redirect canónico.
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  return [];
+  const rows = await sql`
+    SELECT nombre, nregistro FROM farma_name_cache WHERE updated_at IS NOT NULL
+  ` as { nombre: string; nregistro: string }[];
+
+  const seen = new Set<string>();
+  const params: { slug: string }[] = [];
+  for (const r of rows) {
+    if (!r.nombre || !r.nregistro) continue;
+    const slug = makeSlug(r.nombre, r.nregistro);
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    params.push({ slug });
+  }
+  return params;
 }
 
 const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | null> => {
