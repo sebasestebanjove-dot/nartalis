@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import FarmaFooter from "@/components/farma/FarmaFooter";
 import AnalyticsUserId from "@/components/auth/AnalyticsUserId";
+import ProductViewEvents from "@/components/ProductViewEvents";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -78,6 +79,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
       <AnalyticsUserId />
+      <ProductViewEvents />
       {children}
       <FarmaFooter />
       <Analytics />

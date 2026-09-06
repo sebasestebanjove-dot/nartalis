@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { track } from '@/lib/analytics';
+import { persist } from '@/lib/product-events';
 import { styles } from './styles';
 
 export type AuthMode = 'login' | 'register';
@@ -58,6 +59,7 @@ export default function AuthFlow({ initialMode = 'register', onSuccess, onBack, 
     const payload: AuthPayload = { email, password };
     if (mode === 'register') {
       track('registration_started', { provider: 'email' });
+      persist('registration_started', { ga4Extra: { provider: 'email' } });
       payload.name = name;
     } else {
       track('login_started', { provider: 'email' });
@@ -107,6 +109,9 @@ export default function AuthFlow({ initialMode = 'register', onSuccess, onBack, 
     setMessage('');
     setLoading(true);
     track(mode === 'register' ? 'registration_started' : 'login_started', { provider: 'google' });
+    if (mode === 'register') {
+      persist('registration_started', { ga4Extra: { provider: 'google' } });
+    }
     // Persistir intención para registrar completed/failed tras el callback (sin PII).
     try {
       sessionStorage.setItem(INTENT_KEY, mode);

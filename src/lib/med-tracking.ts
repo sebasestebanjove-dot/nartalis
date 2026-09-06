@@ -1,4 +1,5 @@
 import { track } from '@/lib/analytics';
+import { persist, type ProductEventSource } from '@/lib/product-events';
 
 // Singleton de módulo (lado cliente) para la semántica de sesión de medicamentos.
 // Responsabilidad EXCLUSIVA: delimitar la sesión de navegación y emitir
@@ -28,6 +29,7 @@ export function registerMedView(nregistro: string, nombre: string, source: strin
 
   // medicine_view SIEMPRE (la "visita real" la determinó el componente).
   track('medicine_view', { nregistro, nombre, source });
+  persist('medicine_view', { nregistro, source: source as ProductEventSource });
 
   // Evaluar la transición contra el estado ANTERIOR, antes de mutarlo.
   const isDistinct = nregistro !== lastDistinctNregistro;
@@ -36,6 +38,7 @@ export function registerMedView(nregistro: string, nombre: string, source: strin
     distinctCount += 1;
     if (distinctCount === 2 && !secondViewFired) {
       track('medicine_second_view', { nregistro, nombre, source });
+      persist('medicine_second_view', { nregistro, source: source as ProductEventSource });
       secondViewFired = true;
     }
   }

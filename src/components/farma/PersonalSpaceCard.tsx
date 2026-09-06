@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { HeartPulse } from 'lucide-react';
 import { track } from '@/lib/analytics';
+import { persist } from '@/lib/product-events';
 import type { PublicSessionUser } from '@/lib/auth';
 
 interface PersonalSpaceCardProps {
@@ -23,6 +24,7 @@ export default function PersonalSpaceCard({ onCta, onLoginCta, sessionUser = nul
       if (!viewTracked.current && entries.some(e => e.isIntersecting)) {
         viewTracked.current = true;
         track('personal_space_cta_view');
+        persist('cta_view');
       }
     }, { threshold: 0.3 });
     io.observe(el);
@@ -31,6 +33,7 @@ export default function PersonalSpaceCard({ onCta, onLoginCta, sessionUser = nul
 
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     track('personal_space_cta_click');
+    persist('cta_click');
     if (onCta) {
       e.preventDefault();
       onCta();

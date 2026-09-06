@@ -46,7 +46,9 @@ function normalizeSearch(q: string): string {
 
 // Origen de la búsqueda (trazabilidad interna). El total y el Top 5 son SIEMPRE
 // globales: source/source_page solo describen el punto de entrada.
-const SEARCH_SOURCES = ['home', 'medicine_page'] as const;
+// 'espacio' = buscador del Espacio Personal (V2Search); 'otros' = cualquier
+// superficie futura. Valores desconocidos → 'home' (comportamiento heredado).
+const SEARCH_SOURCES = ['home', 'medicine_page', 'espacio', 'otros'] as const;
 type SearchSource = (typeof SEARCH_SOURCES)[number];
 
 // Ahorro Neon: con DISABLE_PROSPECT_INGEST=1 se corta la ingestión ATC/PA
