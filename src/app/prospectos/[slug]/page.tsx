@@ -188,7 +188,7 @@ async function selectProspectos(limit: number): Promise<{ slug: string }[]> {
 }
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  return selectProspectos(2000);
+  return selectProspectos(5000);
 }
 
 const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | null> => {
