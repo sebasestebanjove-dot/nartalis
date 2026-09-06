@@ -26,21 +26,169 @@ interface Props {
 // sirve desde CDN sin ejecutar Function. La revalidación ISR (revalidate =
 // 86400) refresca en segundo plano. Slugs desconocidos siguen generándose
 // on-demand (dynamicParams por defecto) e incluyen su redirect canónico.
-export async function generateStaticParams(): Promise<{ slug: string }[]> {
+function planBInitial(nombre: string): string {
+  const first = nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').charAt(0) || '?';
+  return first.toUpperCase();
+}
+
+async function selectProspectos(limit: number): Promise<{ slug: string }[]> {
   const rows = await sql`
-    SELECT nombre, nregistro FROM farma_name_cache WHERE updated_at IS NOT NULL
+    SELECT nombre, nregistro FROM farma_name_cache
+    WHERE updated_at IS NOT NULL
+    ORDER BY nombre ASC, nregistro ASC
   ` as { nombre: string; nregistro: string }[];
+
+  // Relaciones reales de la arquitectura: pa_cache (todos) y atc_cache SOLO nivel 4
+  // (getRelatedByAtc usa m.atcs[].nivel === 4). Nivel 5/3 nunca generan cross-links.
+  const paRows = await sql`
+    SELECT principio, nregistro FROM pa_cache
+    ORDER BY nregistro ASC, principio ASC
+  ` as { principio: string; nregistro: string }[];
+  const atcRows = await sql`
+    SELECT code, nregistro FROM atc_cache
+    WHERE level = 4
+    ORDER BY nregistro ASC, code ASC
+  ` as { code: string; nregistro: string }[];
+
+  const n = rows.length;
+  const idxByNreg = new Map<string, number>();
+  const initialOf = new Array<string>(n);
+  for (let i = 0; i < n; i++) {
+    idxByNreg.set(rows[i].nregistro, i);
+    initialOf[i] = planBInitial(rows[i].nombre);
+  }
+
+  const paByFicha: string[][] = new Array(n);
+  const atcByFicha: string[][] = new Array(n);
+  const paFichas = new Map<string, number[]>();
+  const atcFichas = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    paByFicha[i] = [];
+    atcByFicha[i] = [];
+  }
+
+  for (const r of paRows) {
+    const i = idxByNreg.get(r.nregistro);
+    if (i == null) continue;
+    paByFicha[i].push(r.principio);
+    const list = paFichas.get(r.principio);
+    if (list) list.push(i);
+    else paFichas.set(r.principio, [i]);
+  }
+  for (const r of atcRows) {
+    const i = idxByNreg.get(r.nregistro);
+    if (i == null) continue;
+    atcByFicha[i].push(r.code);
+    const list = atcFichas.get(r.code);
+    if (list) list.push(i);
+    else atcFichas.set(r.code, [i]);
+  }
+
+  const freqPA = new Map<string, number>();
+  for (const [k, arr] of paFichas) freqPA.set(k, arr.length);
+  const freqATC = new Map<string, number>();
+  for (const [k, arr] of atcFichas) freqATC.set(k, arr.length);
+
+  const gain = new Int32Array(n);
+  for (let i = 0; i < n; i++) gain[i] = paByFicha[i].length + atcByFicha[i].length;
+
+  const chosen = new Uint8Array(n);
+  const coveredPA = new Set<string>();
+  const coveredATC = new Set<string>();
+  const selected: number[] = [];
+  const initialCount = new Map<string, number>();
+
+  const take = (f: number) => {
+    chosen[f] = 1;
+    selected.push(f);
+    const ini = initialOf[f];
+    initialCount.set(ini, (initialCount.get(ini) || 0) + 1);
+    for (const p of paByFicha[f]) {
+      if (coveredPA.has(p)) continue;
+      coveredPA.add(p);
+      for (const j of paFichas.get(p)!) gain[j]--;
+    }
+    for (const c of atcByFicha[f]) {
+      if (coveredATC.has(c)) continue;
+      coveredATC.add(c);
+      for (const j of atcFichas.get(c)!) gain[j]--;
+    }
+  };
+
+  while (selected.length < limit) {
+    let best = 0;
+    const ties: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (chosen[i]) continue;
+      const g = gain[i];
+      if (g > best) { best = g; ties.length = 0; ties.push(i); }
+      else if (g === best) ties.push(i);
+    }
+    if (best === 0) break;
+
+    let pick = ties[0];
+    let bestScore = -1;
+    let bestIni = Infinity;
+    for (const i of ties) {
+      let score = 0;
+      for (const p of paByFicha[i]) if (!coveredPA.has(p)) score += 1 / (freqPA.get(p) || 1);
+      for (const c of atcByFicha[i]) if (!coveredATC.has(c)) score += 1 / (freqATC.get(c) || 1);
+      const ini = initialCount.get(initialOf[i]) || 0;
+      if (score > bestScore || (score === bestScore && ini < bestIni)) {
+        bestScore = score;
+        bestIni = ini;
+        pick = i;
+      }
+    }
+    take(pick);
+  }
+
+  if (selected.length < limit) {
+    for (let i = 0; i < n && selected.length < limit; i++) {
+      if (!chosen[i]) take(i);
+    }
+  }
+
+  const paCountInSel = new Map<string, number>();
+  const atcCountInSel = new Map<string, number>();
+  let sinRel = 0;
+  for (const f of selected) {
+    if (paByFicha[f].length === 0 && atcByFicha[f].length === 0) sinRel++;
+    for (const p of paByFicha[f]) paCountInSel.set(p, (paCountInSel.get(p) || 0) + 1);
+    for (const c of atcByFicha[f]) atcCountInSel.set(c, (atcCountInSel.get(c) || 0) + 1);
+  }
 
   const seen = new Set<string>();
   const params: { slug: string }[] = [];
-  for (const r of rows) {
+  for (const f of selected) {
+    const r = rows[f];
     if (!r.nombre || !r.nregistro) continue;
     const slug = makeSlug(r.nombre, r.nregistro);
     if (!slug || seen.has(slug)) continue;
     seen.add(slug);
     params.push({ slug });
   }
+
+  let hhiPa = 0;
+  for (const cnt of paCountInSel.values()) hhiPa += (cnt / selected.length) * (cnt / selected.length);
+  let maxIni = 0;
+  let maxIniKey = '';
+  for (const [k, v] of initialCount) if (v > maxIni) { maxIni = v; maxIniKey = k; }
+
+  console.log(`[PLAN-B] catalogo total: ${rows.length}`);
+  console.log(`[PLAN-B] seleccionadas: ${params.length}`);
+  console.log(`[PLAN-B] PA unicas cubiertas: ${paCountInSel.size} (${((paCountInSel.size / freqPA.size) * 100).toFixed(1)}% de ${freqPA.size})`);
+  console.log(`[PLAN-B] ATC unicos cubiertos: ${atcCountInSel.size} (${((atcCountInSel.size / freqATC.size) * 100).toFixed(1)}% de ${freqATC.size})`);
+  console.log(`[PLAN-B] fichas sin PA/ATC seleccionadas: ${sinRel}`);
+  console.log(`[PLAN-B] iniciales representadas: ${initialCount.size}`);
+  console.log(`[PLAN-B] inicial dominante: ${maxIniKey} (${maxIni} / ${((maxIni / selected.length) * 100).toFixed(2)}%)`);
+  console.log(`[PLAN-B] HHI PA: ${hhiPa.toFixed(4)}`);
+
   return params;
+}
+
+export async function generateStaticParams(): Promise<{ slug: string }[]> {
+  return selectProspectos(5000);
 }
 
 const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | null> => {
