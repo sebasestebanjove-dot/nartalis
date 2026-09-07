@@ -19,7 +19,13 @@
 import { track } from '@/lib/analytics'
 
 const LOCAL_VISITOR_KEY = 'nartalis_visitor_id'
-const LAST_EMIT_KEY = 'nartalis_last_event_at'
+
+// Clave de localStorage por evento: aísla el cooldown de cada evento de los
+// demás (antes un único timestamp global bloqueaba events posteriores, p.ej.
+// page_view → medicine_view).
+function getLastEmitKey(event: ProductEventName): string {
+  return `nartalis_last_${event}_at`
+}
 
 export type ProductEventName =
   | 'page_view'
@@ -81,10 +87,11 @@ function cooldownPasses(event: ProductEventName): boolean {
   const min = EVENT_COOLDOWN_MS[event]
   if (!min || min <= 0) return true
   try {
-    const last = Number(localStorage.getItem(LAST_EMIT_KEY) || 0)
+    const key = getLastEmitKey(event)
+    const last = Number(localStorage.getItem(key) || 0)
     const now = Date.now()
     if (last && now - last < min) return false
-    localStorage.setItem(LAST_EMIT_KEY, String(now))
+    localStorage.setItem(key, String(now))
   } catch { /* sin almacenamiento: se emite */ }
   return true
 }
