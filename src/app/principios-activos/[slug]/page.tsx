@@ -6,7 +6,7 @@ import { catalogMetadata } from '@/lib/medicamentos';
 import { makeSlug } from '@/lib/slug';
 import { resolvePa } from '@/lib/pa-resolve';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 interface Props {
   params: Promise<{ slug: string }>;

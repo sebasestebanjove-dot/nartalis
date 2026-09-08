@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { catalogMetadata } from '@/lib/medicamentos';
 import { makeSlug } from '@/lib/slug';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 interface Props { params: Promise<{ slug: string }> }
 
@@ -14,7 +14,7 @@ async function fetchByLab(slug: string): Promise<{ nombre: string; nregistro: st
     const searchTerm = deslug.split(/\s+/)[0];
     const res = await fetch(
       `https://cima.aemps.es/cima/rest/medicamentos?nombre=${encodeURIComponent(searchTerm)}`,
-      { signal: AbortSignal.timeout(15000) },
+      { next: { revalidate: 86400 }, signal: AbortSignal.timeout(15000) },
     );
     if (!res.ok) return [];
     const data = await res.json();

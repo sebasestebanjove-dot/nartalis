@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getAllLetters, catalogMetadata } from '@/lib/medicamentos';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export const metadata: Metadata = catalogMetadata(
   'Medicamentos — Información y prospectos | Nartalis',

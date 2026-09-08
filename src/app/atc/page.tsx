@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { sql } from '@/lib/db';
 import { catalogMetadata } from '@/lib/medicamentos';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 export const metadata: Metadata = catalogMetadata(
   'Clasificación ATC de medicamentos — Grupos terapéuticos | Nartalis',

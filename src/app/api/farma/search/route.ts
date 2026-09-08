@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidatePath } from 'next/cache';
 import { sql } from '@/lib/db';
 import { getNartalisSession } from '@/lib/auth';
 import { cimaBreaker } from '@/lib/circuit-breaker';
@@ -349,7 +348,6 @@ export async function GET(request: NextRequest) {
         const similar = isSimilar(q, correctedBase);
         try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
-        revalidatePath('/sitemap.xml');
         if (PRINCIPLE_INGEST_ENABLED) {
           try { await ingestPrinciplesBatch(collectPaPairs(resultados)); } catch { /* silent */ }
         }
@@ -363,7 +361,6 @@ export async function GET(request: NextRequest) {
 
         try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
-        revalidatePath('/sitemap.xml');
         if (PRINCIPLE_INGEST_ENABLED) {
           try { await ingestPrinciplesBatch(collectPaPairs(resultados)); } catch { /* silent */ }
         }
@@ -387,7 +384,6 @@ export async function GET(request: NextRequest) {
           if (!isSimilar(q, correctedBase)) break;
           try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
           await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
-          revalidatePath('/sitemap.xml');
            if (PRINCIPLE_INGEST_ENABLED) {
              try { await ingestPrinciplesBatch(collectPaPairs(retryResultados)); } catch { /* silent */ }
            }
@@ -428,7 +424,6 @@ export async function GET(request: NextRequest) {
                 if (fuzzyResultados.length > 0) {
                   try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
                   await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
-                  revalidatePath('/sitemap.xml');
                   if (PRINCIPLE_INGEST_ENABLED) {
                     try { await ingestPrinciplesBatch(collectPaPairs(fuzzyResultados)); } catch { /* silent */ }
                   }

@@ -14,7 +14,7 @@ import type { PaLink } from '@/components/farma/screens/ProspectoView';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://nartalis.com';
 
 // ISR: la ficha pública se sirve desde HTML cacheado y se regenera en 2º plano.
-// El revalidate efectivo de la ruta = min(revalidate ruta, fetch CIMA, unstable_cache) = 3600.
+// El revalidate efectivo de la ruta = min(revalidate ruta, fetch CIMA, unstable_cache) = 86400.
 export const revalidate = 86400;
 
 interface Props {

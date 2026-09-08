@@ -8,7 +8,14 @@ import { countByLetter } from '@/lib/medicamentos';
 import { resolveMedicamentoPaLinks } from '@/lib/pa-resolve';
 import type { PaLink } from '@/components/farma/screens/ProspectoView';
 
-const TTL = 3600;
+// P1 (ahorro ISR/Data Cache): TTL elevado a 24h. Estas queries alimentan enlaces
+// relacionados / canonical / letter-count (no datos clínicos críticos). Con la
+// ingestión desactivada en producción (DISABLE_PROSPECT_INGEST=1), los datos de
+// pa_cache/atc_cache/farma_principles apenas cambian; 24h evita la regeneración
+// horaria que disparaba ISR writes en background (~24x menos escrituras) sin
+// degradar la frescura de la información del medicamento (que sigue viniendo del
+// fetch CIMA con next.revalidate=86400).
+const TTL = 86400;
 
 export interface RelatedRow {
   nombre: string;

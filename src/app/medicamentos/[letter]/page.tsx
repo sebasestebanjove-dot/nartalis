@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { countByLetter, getDrugsByLetter, catalogMetadata, PAGE_SIZE } from '@/lib/medicamentos';
 import { makeSlug } from '@/lib/slug';
 
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 interface Props {
   params: Promise<{ letter: string }>;
