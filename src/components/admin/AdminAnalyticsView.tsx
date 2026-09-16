@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { adminS, A } from './adminStyles'
 
 // Panel analítico de Nartalis (V2 REAL, data propia en Neon).
@@ -198,6 +199,7 @@ function NeonSection({ tab, exclude, range, reload }: { tab: AnalyticsTab; exclu
         p.set('exclude', exclude ? '1' : '0')
         if (from) p.set('from', from)
         if (to) p.set('to', to)
+        if (tab === 'visits') p.set('daily_limit', '20')
         const res = await fetch(`/api/admin/analytics?${p.toString()}`)
         if (!res.ok) throw new Error('no ok')
         const data = await res.json()
@@ -675,6 +677,11 @@ function VisitsView({ d }: { d: VisitsData }) {
         {d.daily?.length ? (
           <Table headers={['Día', 'Páginas vistas', 'Visitantes']} rows={d.daily.map((x) => [x.day, x.pageviews, x.visitors])} />
         ) : <div style={adminS.empty}>Sin datos.</div>}
+        <div style={{ marginTop: '0.6rem' }}>
+          <Link href="/admin/analytics/historico" style={{ fontSize: 13, color: A.accentText, textDecoration: 'none', fontWeight: 600 }}>
+            Ver histórico completo →
+          </Link>
+        </div>
       </div>
     </div>
   )

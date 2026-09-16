@@ -30,6 +30,9 @@ export async function GET(req: NextRequest) {
   const toRaw = sp.get('to')
   const from = fromRaw && DATE_RE.test(fromRaw) ? fromRaw : null
   const to = toRaw && DATE_RE.test(toRaw) ? toRaw : null
+  const dailyLimitRaw = sp.get('daily_limit')
+  const dailyLimit =
+    dailyLimitRaw && /^\d+$/.test(dailyLimitRaw) && Number(dailyLimitRaw) > 0 ? Number(dailyLimitRaw) : null
   const ctx: Ctx = { exclude, from, to }
 
   switch (section) {
@@ -46,7 +49,7 @@ export async function GET(req: NextRequest) {
     case 'fuentes':
       return handleFuentes(ctx)
     case 'visits':
-      return handleVisits(ctx)
+      return handleVisits(ctx, dailyLimit)
     case 'funnel':
       return handleFunnel(ctx)
     case 'cta':
@@ -475,7 +478,7 @@ function eventScope(ctx: Ctx): string {
   return s
 }
 
-async function handleVisits(ctx: Ctx) {
+async function handleVisits(ctx: Ctx, dailyLimit: number | null = null) {
   try {
     const scope = eventScope(ctx)
 
@@ -533,7 +536,8 @@ async function handleVisits(ctx: Ctx) {
               COUNT(DISTINCT e.visitor_id)::int AS visitors
        FROM nartalis_events e ${scope} AND e.event_name = 'page_view'
        GROUP BY DATE(e.created_at)
-       ORDER BY day ASC`,
+       ORDER BY day DESC
+       ${dailyLimit ? `LIMIT ${dailyLimit}` : ''}`,
     )
 
     return ok({

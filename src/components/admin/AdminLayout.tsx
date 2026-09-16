@@ -116,7 +116,11 @@ const S = {
 }
 
 export default function AdminLayout({ sessionUser }: { sessionUser: PublicSessionUser }) {
-  const [tab, setTab] = useState<AdminTab>('resumen')
+  const [tab, setTab] = useState<AdminTab>(() => {
+    if (typeof window === 'undefined') return 'resumen'
+    const t = new URLSearchParams(window.location.search).get('tab')
+    return t && TABS.some((x) => x.key === t) ? (t as AdminTab) : 'resumen'
+  })
 
   return (
     <div style={S.wrap}>
