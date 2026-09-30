@@ -7,6 +7,7 @@ import { sql } from '@/lib/db';
 import { makeSlug } from '@/lib/slug';
 import { ingestPrincipleIfPresent } from '@/lib/pa-principle';
 import { getCanonicalPaLinks, getRelatedByAtc, getRelatedByPa, getLetterCount } from '@/lib/prospect-cache';
+import { getClinicalDataForJsonLd, buildClinicalJsonLd, type ClinicalDataForJsonLd } from '@/lib/cima-clinical-public';
 import ProspectoView from '@/components/farma/screens/ProspectoView';
 import type { Medicamento } from '@/components/farma/types';
 import type { PaLink } from '@/components/farma/screens/ProspectoView';
@@ -479,6 +480,16 @@ export default async function ProspectoPage({ params }: Props) {
     }
   } catch { /* best-effort */ }
 
+  // Fetch clinical data for JSON-LD enrichment (only GOOD quality)
+  let clinicalData: ClinicalDataForJsonLd | null = null;
+  let clinicalJsonLdNodes: Record<string, any>[] = [];
+  try {
+    clinicalData = await getClinicalDataForJsonLd(m.registro);
+    if (clinicalData) {
+      clinicalJsonLdNodes = buildClinicalJsonLd(clinicalData);
+    }
+  } catch { /* best-effort: clinical data is optional */ }
+
   const jsonLd: Record<string, any> = {
     '@context': 'https://schema.org',
     '@type': 'Drug',
@@ -505,6 +516,7 @@ export default async function ProspectoPage({ params }: Props) {
     } : undefined,
     warning: m.conduc ? 'Puede afectar a la capacidad de conducir' : undefined,
     identifier: m.registro ? { '@type': 'PropertyValue', propertyID: 'AEMPS', value: m.registro } : undefined,
+    ...(clinicalJsonLdNodes.length > 0 ? { subjectOf: clinicalJsonLdNodes } : {}),
   };
   Object.keys(jsonLd).forEach(k => { if (jsonLd[k] === undefined) delete jsonLd[k]; });
 
@@ -557,6 +569,13 @@ export default async function ProspectoPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
       />
+      {clinicalJsonLdNodes.map((node, index) => (
+        <script
+          key={`clinical-${index}`}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(node) }}
+        />
+      ))}
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '1rem 1.5rem 0', width: '100%' }}>
         <nav aria-label="Breadcrumb" style={{ fontSize: 13, color: '#94A3B8', marginBottom: '0.5rem' }}>
           <Link href="/" style={{ color: '#94A3B8', textDecoration: 'none' }}>Inicio</Link>
