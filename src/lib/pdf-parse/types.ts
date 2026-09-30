@@ -74,7 +74,7 @@ export interface PageTextItem {
 }
 
 export interface SectionMatch {
-  sectionKey: string;
+  sectionKey: CimaSectionKey;
   titleOriginal: string;
   startIndex: number;
   endIndex: number;
