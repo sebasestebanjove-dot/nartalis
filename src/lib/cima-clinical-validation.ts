@@ -1,4 +1,4 @@
-import type { CimaClinicalExtraction } from '@/lib/pdf-parse/types';
+import type { CimaClinicalExtraction, CimaSectionKey } from '@/lib/pdf-parse/types';
 
 export interface ValidationResult {
   accepted: boolean;
@@ -122,11 +122,11 @@ export function isPublicable(extraction: CimaClinicalExtraction): boolean {
   return result.qualityClass === 'good';
 }
 
-export function getPublicableFields(extraction: CimaClinicalExtraction): string[] {
+export function getPublicableFields(extraction: CimaClinicalExtraction): CimaSectionKey[] {
   const validation = validateClinicalExtraction(extraction);
   if (!validation.accepted) return [];
   
-  const requiredSections = ['indicaciones', 'contraindicaciones', 'advertencias', 'posologia',
+  const requiredSections: CimaSectionKey[] = ['indicaciones', 'contraindicaciones', 'advertencias', 'posologia',
     'administracion', 'efectosAdversos', 'interacciones', 'embarazoLactancia',
     'conduccion', 'excipientes', 'composicion'];
   
