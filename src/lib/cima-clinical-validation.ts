@@ -131,6 +131,6 @@ export function getPublicableFields(extraction: CimaClinicalExtraction): CimaSec
     'conduccion', 'excipientes', 'composicion'];
   
   return requiredSections.filter(section => 
-    extraction.sections[section]?.text?.length > 0
+    (extraction.sections[section]?.text?.length ?? 0) > 0
   );
 }
