@@ -84,11 +84,16 @@ function tableWhere(ctx: Ctx, dateCol: string, idCol: string): string {
   return s
 }
 
-// Alcance de farma_search_log. keeps_anon=true conserva búsquedas anónimas
-// (no imputables a internos); identified solo búsquedas con sesión no interna.
+// Alcance de farma_search_log. 
+// NUEVA LÓGICA: Siempre excluye is_test=true (métricas de negocio nunca incluyen tests).
+// keeps_anon=true: usuarios anónimos (por anonymous_id) + identificados no internos.
+// identified: solo usuarios autenticados no internos.
 function searchScope(ctx: Ctx, mode: 'keeps_anon' | 'identified'): string {
   let s = 'WHERE 1=1'
   s += dateAnd(ctx, 'created_at')
+  // SIEMPRE excluir tests internos
+  s += ` AND (is_test IS NULL OR is_test = false)`
+  
   if (mode === 'keeps_anon') {
     if (ctx.exclude) s += ` AND (user_id IS NULL OR ${excludeInternalClause('user_id')})`
   } else {
@@ -105,18 +110,75 @@ async function handleSearch(ctx: Ctx) {
     const scope = searchScope(ctx, 'keeps_anon')
     const scen = searchScope(ctx, 'identified')
 
+    // Métricas totales con deduplicación correcta usando anonymous_id + session_id
     const [totals] = await sql.query(
       `SELECT
          COUNT(*)::int AS total,
          COUNT(*) FILTER (WHERE was_successful)::int AS with_results,
          COUNT(*) FILTER (WHERE NOT was_successful)::int AS without_results,
-         COUNT(*) FILTER (WHERE user_id IS NULL)::int AS anonymous,
-         COUNT(*) FILTER (WHERE user_id IS NOT NULL AND ${excl})::int AS identified,
-         COUNT(*) FILTER (WHERE user_id IS NOT NULL AND NOT (${excl}))::int AS internal
+         -- Usuarios distintos = anonymous_id distintos (anónimos) + user_id distintos (identificados no internos)
+         COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END)::int AS distinct_users,
+         -- Sesiones distintas = session_id distintos
+         COUNT(DISTINCT session_id)::int AS distinct_sessions,
+         -- Búsquedas por usuario (media)
+         COUNT(*)::float / NULLIF(COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END), 0) AS searches_per_user,
+         -- Búsquedas por sesión (media)
+         COUNT(*)::float / NULLIF(COUNT(DISTINCT session_id), 0) AS searches_per_session,
+         -- Desglose legacy (para compatibilidad)
+         COUNT(*) FILTER (WHERE user_id IS NULL)::int AS anonymous_legacy,
+         COUNT(*) FILTER (WHERE user_id IS NOT NULL AND ${excl})::int AS identified_legacy,
+         COUNT(*) FILTER (WHERE user_id IS NOT NULL AND NOT (${excl}))::int AS internal_legacy
        FROM farma_search_log ${scope}`,
     )
 
-    // Usuarios distintos que buscaron con sesión (búsquedas ≠ personas).
+    // Distribución de búsquedas por usuario (para histograma)
+    const distribution = await sql.query(
+      `SELECT 
+         searches_per_user_bucket,
+         COUNT(*)::int AS user_count
+       FROM (
+         SELECT 
+           CASE 
+             WHEN cnt = 1 THEN '1'
+             WHEN cnt BETWEEN 2 AND 3 THEN '2-3'
+             WHEN cnt BETWEEN 4 AND 5 THEN '4-5'
+             WHEN cnt BETWEEN 6 AND 10 THEN '6-10'
+             WHEN cnt BETWEEN 11 AND 20 THEN '11-20'
+             WHEN cnt BETWEEN 21 AND 50 THEN '21-50'
+             ELSE '>50'
+           END AS searches_per_user_bucket
+         FROM (
+           SELECT 
+             CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END AS person_id,
+             COUNT(*) as cnt
+           FROM farma_search_log ${scope}
+           GROUP BY CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END
+         ) x
+       ) y
+       GROUP BY searches_per_user_bucket
+       ORDER BY 
+         CASE searches_per_user_bucket
+           WHEN '1' THEN 1 WHEN '2-3' THEN 2 WHEN '4-5' THEN 3 
+           WHEN '6-10' THEN 4 WHEN '11-20' THEN 5 WHEN '21-50' THEN 6 ELSE 7 END`,
+    )
+
+    // Top sesiones con más búsquedas
+    const topSessions = await sql.query(
+      `SELECT 
+         session_id,
+         MIN(created_at)::text AS first_search,
+         MAX(created_at)::text AS last_search,
+         COUNT(*)::int AS searches,
+         COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END)::int AS persons,
+         STRING_AGG(DISTINCT LOWER(TRIM(query)), ', ' ORDER BY LOWER(TRIM(query)) LIMIT 5) AS top_queries
+       FROM farma_search_log ${scope}
+       WHERE session_id IS NOT NULL
+       GROUP BY session_id
+       ORDER BY searches DESC
+       LIMIT 20`,
+    )
+
+    // Usuarios distintos que buscaron con sesión (identificados).
     const [users] = await sql.query(
       `SELECT COUNT(DISTINCT user_id)::int AS users
        FROM farma_search_log ${scen}`,
@@ -129,41 +191,58 @@ async function handleSearch(ctx: Ctx) {
          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days')::int AS last_30d,
          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '90 days')::int AS last_90d
        FROM farma_search_log WHERE 1=1
+       AND (is_test IS NULL OR is_test = false)
        ${ctx.exclude ? `AND (user_id IS NULL OR ${excl})` : ''}`,
     )
 
     const bySource = await sql.query(
       `SELECT CASE
-                WHEN source IS NULL OR source = '' THEN 'no_atribuido'
-                WHEN source = 'home' THEN 'home'
-                WHEN source = 'medicine_page' THEN 'medicine_page'
-                ELSE 'otros'
-              END AS origin,
-              COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE was_successful)::int AS with_results,
-              COUNT(*) FILTER (WHERE NOT was_successful)::int AS without_results
-       FROM farma_search_log ${scope}
-       GROUP BY origin
-       ORDER BY total DESC`,
+                 WHEN source IS NULL OR source = '' THEN 'no_atribuido'
+                 WHEN source = 'home' THEN 'home'
+                 WHEN source = 'medicine_page' THEN 'medicine_page'
+                 ELSE 'otros'
+               END AS origin,
+               COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE was_successful)::int AS with_results,
+               COUNT(*) FILTER (WHERE NOT was_successful)::int AS without_results
+        FROM farma_search_log ${scope}
+        GROUP BY origin
+        ORDER BY total DESC`,
     )
 
     const bySourcePage = await sql.query(
       `SELECT CASE
-                WHEN source_page IS NULL OR source_page = '' THEN 'no_atribuido'
-                WHEN source_page = '/' THEN 'home'
-                WHEN source_page LIKE '/prospectos/%' THEN 'medicine_page'
-                ELSE 'otros'
-              END AS origin,
-              COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE was_successful)::int AS with_results,
-              COUNT(*) FILTER (WHERE NOT was_successful)::int AS without_results
-       FROM farma_search_log ${scope}
-       GROUP BY origin
-       ORDER BY total DESC`,
+                 WHEN source_page IS NULL OR source_page = '' THEN 'no_atribuido'
+                 WHEN source_page = '/' THEN 'home'
+                 WHEN source_page LIKE '/prospectos/%' THEN 'medicine_page'
+                 ELSE 'otros'
+               END AS origin,
+               COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE was_successful)::int AS with_results,
+               COUNT(*) FILTER (WHERE NOT was_successful)::int AS without_results
+        FROM farma_search_log ${scope}
+        GROUP BY origin
+        ORDER BY total DESC`,
     )
 
     const daily = await sql.query(
-      `SELECT DATE(created_at)::text AS day, COUNT(*)::int AS total
+      `SELECT 
+         DATE(created_at)::text AS day, 
+         COUNT(*)::int AS total,
+         -- distinct_users: NULL = "No medible", 0 = medido y cero
+         CASE 
+           WHEN COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END) = 0 
+            AND COUNT(*) FILTER (WHERE anonymous_id IS NULL AND user_id IS NULL) = COUNT(*) 
+           THEN NULL 
+           ELSE COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END) 
+         END AS distinct_users,
+         -- distinct_sessions: NULL = "No medible", 0 = medido y cero
+         CASE 
+           WHEN COUNT(DISTINCT session_id) = 0 
+            AND COUNT(*) FILTER (WHERE session_id IS NULL) = COUNT(*) 
+           THEN NULL 
+           ELSE COUNT(DISTINCT session_id) 
+         END AS distinct_sessions
        FROM farma_search_log ${scope}
        GROUP BY DATE(created_at)
        ORDER BY day ASC`,
@@ -171,23 +250,44 @@ async function handleSearch(ctx: Ctx) {
 
     const topQueries = await sql.query(
       `SELECT LOWER(TRIM(query)) AS query,
-              COUNT(*)::int AS n,
-              COUNT(*) FILTER (WHERE was_successful)::int AS with_results
-       FROM farma_search_log ${scope}
-         AND query IS NOT NULL AND TRIM(query) <> ''
-       GROUP BY LOWER(TRIM(query))
-       ORDER BY n DESC
-       LIMIT 10`,
+               COUNT(*)::int AS n,
+               COUNT(*) FILTER (WHERE was_successful)::int AS with_results,
+               -- distinct_users: NULL = "No medible" si todos los registros carecen de anonymous_id/user_id
+               CASE 
+                 WHEN COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END) = 0 
+                  AND COUNT(*) FILTER (WHERE anonymous_id IS NULL AND user_id IS NULL) = COUNT(*) 
+                 THEN NULL 
+                 ELSE COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END) 
+               END AS distinct_users,
+               -- distinct_sessions: NULL = "No medible" si todos carecen de session_id
+               CASE 
+                 WHEN COUNT(DISTINCT session_id) = 0 
+                  AND COUNT(*) FILTER (WHERE session_id IS NULL) = COUNT(*) 
+                 THEN NULL 
+                 ELSE COUNT(DISTINCT session_id) 
+               END AS distinct_sessions
+        FROM farma_search_log ${scope}
+          AND query IS NOT NULL AND TRIM(query) <> ''
+        GROUP BY LOWER(TRIM(query))
+        ORDER BY n DESC
+        LIMIT 10`,
     )
 
     const topZero = await sql.query(
-      `SELECT LOWER(TRIM(query)) AS query, COUNT(*)::int AS n
-       FROM farma_search_log ${scope}
-         AND NOT was_successful
-         AND query IS NOT NULL AND TRIM(query) <> ''
-       GROUP BY LOWER(TRIM(query))
-       ORDER BY n DESC
-       LIMIT 10`,
+      `SELECT LOWER(TRIM(query)) AS query, 
+               COUNT(*)::int AS n,
+               CASE 
+                 WHEN COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END) = 0 
+                  AND COUNT(*) FILTER (WHERE anonymous_id IS NULL AND user_id IS NULL) = COUNT(*) 
+                 THEN NULL 
+                 ELSE COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END) 
+               END AS distinct_users
+        FROM farma_search_log ${scope}
+          AND NOT was_successful
+          AND query IS NOT NULL AND TRIM(query) <> ''
+        GROUP BY LOWER(TRIM(query))
+        ORDER BY n DESC
+        LIMIT 10`,
     )
 
     return ok({
@@ -201,6 +301,8 @@ async function handleSearch(ctx: Ctx) {
       daily,
       topQueries,
       topZero,
+      distribution,
+      topSessions,
     })
   } catch (e) {
     return fail(e)
@@ -244,21 +346,21 @@ async function handleMedEngagement(ctx: Ctx) {
        ORDER BY day ASC`,
     )
 
-    // Parte anónima del engagement (nartalis_events): medicina views y segunda
-    // interacción. No se une con las consultas identificadas (funnels separados).
-    const eventsScope = eventScope(ctx)
+    // Parte anónima del engagement (nartalis_person_identity): medicina views y segunda
+    // interacción. Usa person_key para deduplicación anónimo→registrado.
+    const personScopeSql = personScope(ctx)
     const [anon] = await sql.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM nartalis_events e ${eventsScope} AND e.event_name = 'medicine_view') AS medicine_views,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${eventsScope} AND e.event_name = 'medicine_second_view') AS second_views`,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${personScopeSql} AND p.event_name = 'medicine_view') AS medicine_views,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${personScopeSql} AND p.event_name = 'medicine_second_view') AS second_views`,
     )
     const [anonPeriod] = await sql.query(
       `SELECT
-         COUNT(*) FILTER (WHERE e.event_name = 'medicine_view' AND e.created_at >= NOW() - INTERVAL '7 days')::int AS mv_7d,
-         COUNT(*) FILTER (WHERE e.event_name = 'medicine_view' AND e.created_at >= NOW() - INTERVAL '30 days')::int AS mv_30d,
-         COUNT(*) FILTER (WHERE e.event_name = 'medicine_view' AND e.created_at >= NOW() - INTERVAL '90 days')::int AS mv_90d
-       FROM nartalis_events e WHERE e.event_name = 'medicine_view'
-       ${ctx.exclude ? `AND (e.user_id IS NULL OR ${excludeInternalClause('e.user_id')})` : ''}`,
+         COUNT(*) FILTER (WHERE p.event_name = 'medicine_view' AND p.created_at >= NOW() - INTERVAL '7 days')::int AS mv_7d,
+         COUNT(*) FILTER (WHERE p.event_name = 'medicine_view' AND p.created_at >= NOW() - INTERVAL '30 days')::int AS mv_30d,
+         COUNT(*) FILTER (WHERE p.event_name = 'medicine_view' AND p.created_at >= NOW() - INTERVAL '90 days')::int AS mv_90d
+       FROM nartalis_person_identity p WHERE p.event_name = 'medicine_view'
+       ${ctx.exclude ? `AND (p.user_id IS NULL OR ${excludeInternalClause('p.user_id')})` : ''}`,
     )
 
     const topConsulted = await sql.query(
@@ -368,6 +470,9 @@ async function handleConversion(ctx: Ctx) {
 }
 
 // ───────────────────────────── RETENTION ─────────────────────────────
+// Retención unificada: usuarios anónimos (person_key anon:*) + registrados (person_key user:*)
+// Cohortes: primera actividad (page_view, search, medicine_view, etc.)
+// Retorno: cualquier actividad posterior en la ventana D1/D7/D30
 async function handleRetention(ctx: Ctx) {
   try {
     return ok(await computeRetention(ctx))
@@ -376,40 +481,77 @@ async function handleRetention(ctx: Ctx) {
   }
 }
 
-// Comparte la misma lógica de cohorte con Overview.
-async function computeRetention(ctx: Ctx): Promise<{ exclude: boolean; cohort: number; d1: number; d7: number; d30: number }> {
+// Cohortes unificadas: personas (person_key) con primera actividad en el rango.
+// Retorno: cualquier evento posterior (page_view, medicine_view, search, cta_click, etc.)
+async function computeRetention(ctx: Ctx): Promise<{ exclude: boolean; cohort: number; d1: number; d7: number; d30: number; anon_cohort: number; anon_d1: number; anon_d7: number; anon_d30: number; reg_cohort: number; reg_d1: number; reg_d7: number; reg_d30: number }> {
+  const personScopeSql = personScope(ctx)
   const whereU = tableWhere(ctx, 'u.created_at', 'u.id')
-  // Actividad de retorno: búsqueda (preferencia 1), consulta (2), botiquín (3).
-  const rows = await sql.query(
-    `SELECT u.id,
-            u.created_at,
+
+  // 1. Cohorte anónima: person_key = 'anon:*' con primera actividad
+  const anonRows = await sql.query(
+    `SELECT p.person_key,
+            MIN(p.created_at) AS first_at,
+            MIN(CASE WHEN p2.created_at > p.created_at THEN p2.created_at END) AS return_at
+     FROM nartalis_person_identity p
+     LEFT JOIN nartalis_person_identity p2 
+       ON p.person_key = p2.person_key 
+      AND p2.created_at > p.created_at
+     ${personScopeSql}
+     AND p.person_key LIKE 'anon:%'
+     GROUP BY p.person_key
+     HAVING MIN(p.created_at) IS NOT NULL`,
+  )
+
+  // 2. Cohorte registrada: user_id con primera actividad (registro o primera actividad)
+  const regRows = await sql.query(
+    `SELECT u.id AS person_key,
+            u.created_at AS first_at,
             COALESCE(
               (SELECT MIN(s.created_at) FROM farma_search_log s WHERE s.user_id = u.id AND s.created_at > u.created_at),
               (SELECT MIN(c.consulted_at) FROM nartalis_user_consultas c WHERE c.user_id = u.id AND c.consulted_at > u.created_at),
-              (SELECT MIN(m.created_at) FROM nartalis_user_medicamentos m WHERE m.user_id = u.id AND m.created_at > u.created_at)
+              (SELECT MIN(m.created_at) FROM nartalis_user_medicamentos m WHERE m.user_id = u.id AND m.created_at > u.created_at),
+              (SELECT MIN(p.created_at) FROM nartalis_person_identity p WHERE p.user_id = u.id AND p.created_at > u.created_at)
             ) AS return_at
      FROM nartalis_users u ${whereU}`,
   )
 
-  const cohort = rows.length
-  let d1 = 0
-  let d7 = 0
-  let d30 = 0
   const parse = (v: unknown): number => {
     if (v instanceof Date) return v.getTime()
     if (typeof v === 'string') return new Date(v + (v.includes('T') ? 'Z' : 'T00:00:00Z')).getTime()
     return NaN
   }
-  for (const r of rows) {
+
+  let anon_d1 = 0, anon_d7 = 0, anon_d30 = 0
+  for (const r of anonRows) {
     if (!r.return_at) continue
     const ret = parse(r.return_at)
-    const created = parse(r.created_at)
-    if (ret <= created + 1 * 24 * 60 * 60 * 1000) d1++
-    if (ret <= created + 7 * 24 * 60 * 60 * 1000) d7++
-    if (ret <= created + 30 * 24 * 60 * 60 * 1000) d30++
+    const created = parse(r.first_at)
+    if (ret <= created + 1 * 24 * 60 * 60 * 1000) anon_d1++
+    if (ret <= created + 7 * 24 * 60 * 60 * 1000) anon_d7++
+    if (ret <= created + 30 * 24 * 60 * 60 * 1000) anon_d30++
   }
 
-  return { exclude: ctx.exclude, cohort, d1, d7, d30 }
+  let reg_d1 = 0, reg_d7 = 0, reg_d30 = 0
+  for (const r of regRows) {
+    if (!r.return_at) continue
+    const ret = parse(r.return_at)
+    const created = parse(r.first_at)
+    if (ret <= created + 1 * 24 * 60 * 60 * 1000) reg_d1++
+    if (ret <= created + 7 * 24 * 60 * 60 * 1000) reg_d7++
+    if (ret <= created + 30 * 24 * 60 * 60 * 1000) reg_d30++
+  }
+
+  const cohort = anonRows.length + regRows.length
+  const d1 = anon_d1 + reg_d1
+  const d7 = anon_d7 + reg_d7
+  const d30 = anon_d30 + reg_d30
+
+  return { 
+    exclude: ctx.exclude, 
+    cohort, d1, d7, d30,
+    anon_cohort: anonRows.length, anon_d1, anon_d7, anon_d30,
+    reg_cohort: regRows.length, reg_d1, reg_d7, reg_d30
+  }
 }
 
 // ───────────────────────────── FUENTES ─────────────────────────────
@@ -468,10 +610,10 @@ async function handleFuentes(ctx: Ctx) {
 }
 
 // ───────────────────────────── VISITS ─────────────────────────────
-// Funnel anónimo propio (nartalis_events). mide visitas/visitantes/sesiones,
-// páginas vistas, fuentes de adquisición (organic/direct/contextual/internal)
-// y páginas de entrada. Sin PII (sin IP/UA/referrer completo).
-function eventScope(ctx: Ctx): string {
+// Funnel unificado usando identidad canónica (nartalis_person_identity).
+// person_key = 'user:<id>' | 'anon:<id>'  → deduplicación correcta anónimo→registrado
+// session_id → sesiones unificadas (30 min inactividad)
+function personScope(ctx: Ctx): string {
   let s = 'WHERE 1=1'
   s += dateAnd(ctx, 'created_at')
   if (ctx.exclude) s += ` AND (user_id IS NULL OR ${excludeInternalClause('user_id')})`
@@ -480,26 +622,26 @@ function eventScope(ctx: Ctx): string {
 
 async function handleVisits(ctx: Ctx, dailyLimit: number | null = null) {
   try {
-    const scope = eventScope(ctx)
+    const scope = personScope(ctx)
 
     const [aggr] = await sql.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'page_view') AS pageviews,
-         (SELECT COUNT(DISTINCT e.visitor_id)::int FROM nartalis_events e ${scope} AND e.event_name = 'page_view' AND e.visitor_id IS NOT NULL) AS visitors,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'page_view') AS pageviews,
+         (SELECT COUNT(DISTINCT p.person_key)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'page_view') AS visitors,
          (SELECT COUNT(*)::int FROM (
-            SELECT e.visitor_id, e.created_at,
-                   LAG(e.created_at) OVER (PARTITION BY e.visitor_id ORDER BY e.created_at) AS prev
-            FROM nartalis_events e ${scope} AND e.event_name = 'page_view' AND e.visitor_id IS NOT NULL
+            SELECT p.session_id, p.created_at,
+                   LAG(p.created_at) OVER (PARTITION BY p.session_id ORDER BY p.created_at) AS prev
+            FROM nartalis_person_identity p ${scope} AND p.event_name = 'page_view' AND p.session_id IS NOT NULL
           ) w WHERE w.prev IS NULL OR w.created_at - w.prev > INTERVAL '30 minutes') AS visits`,
     )
 
     const [periodView] = await sql.query(
       `SELECT
-         COUNT(*) FILTER (WHERE e.created_at >= NOW() - INTERVAL '7 days')::int AS v7,
-         COUNT(*) FILTER (WHERE e.created_at >= NOW() - INTERVAL '30 days')::int AS v30,
-         COUNT(*) FILTER (WHERE e.created_at >= NOW() - INTERVAL '90 days')::int AS v90
-       FROM nartalis_events e WHERE e.event_name = 'page_view'
-       ${ctx.exclude ? `AND (e.user_id IS NULL OR ${excludeInternalClause('e.user_id')})` : ''}`,
+         COUNT(*) FILTER (WHERE p.created_at >= NOW() - INTERVAL '7 days')::int AS v7,
+         COUNT(*) FILTER (WHERE p.created_at >= NOW() - INTERVAL '30 days')::int AS v30,
+         COUNT(*) FILTER (WHERE p.created_at >= NOW() - INTERVAL '90 days')::int AS v90
+       FROM nartalis_person_identity p WHERE p.event_name = 'page_view'
+       ${ctx.exclude ? `AND (p.user_id IS NULL OR ${excludeInternalClause('p.user_id')})` : ''}`,
     )
 
     const [periodVisit] = await sql.query(
@@ -508,34 +650,34 @@ async function handleVisits(ctx: Ctx, dailyLimit: number | null = null) {
          COUNT(*) FILTER (WHERE x.created_at >= NOW() - INTERVAL '30 days')::int AS v30,
          COUNT(*) FILTER (WHERE x.created_at >= NOW() - INTERVAL '90 days')::int AS v90
        FROM (
-         SELECT visitor_id, created_at,
-                LAG(created_at) OVER (PARTITION BY visitor_id ORDER BY created_at) AS prev
-         FROM nartalis_events e WHERE e.event_name = 'page_view' AND e.visitor_id IS NOT NULL
-         ${ctx.exclude ? `AND (e.user_id IS NULL OR ${excludeInternalClause('e.user_id')})` : ''}
+         SELECT session_id, created_at,
+                LAG(created_at) OVER (PARTITION BY session_id ORDER BY created_at) AS prev
+         FROM nartalis_person_identity p WHERE p.event_name = 'page_view' AND p.session_id IS NOT NULL
+         ${ctx.exclude ? `AND (p.user_id IS NULL OR ${excludeInternalClause('p.user_id')})` : ''}
        ) x WHERE x.prev IS NULL OR x.created_at - x.prev > INTERVAL '30 minutes'`,
     )
 
     const bySource = await sql.query(
-      `SELECT e.source, COUNT(*)::int AS n
-       FROM nartalis_events e ${scope} AND e.event_name = 'page_view' AND e.source IS NOT NULL
-       GROUP BY e.source
+      `SELECT p.source, COUNT(*)::int AS n
+       FROM nartalis_person_identity p ${scope} AND p.event_name = 'page_view' AND p.source IS NOT NULL
+       GROUP BY p.source
        ORDER BY n DESC`,
     )
 
     const topPages = await sql.query(
-      `SELECT e.page, COUNT(*)::int AS n
-       FROM nartalis_events e ${scope} AND e.event_name = 'page_view' AND e.page IS NOT NULL
-       GROUP BY e.page
+      `SELECT p.page, COUNT(*)::int AS n
+       FROM nartalis_person_identity p ${scope} AND p.event_name = 'page_view' AND p.page IS NOT NULL
+       GROUP BY p.page
        ORDER BY n DESC
        LIMIT 10`,
     )
 
     const daily = await sql.query(
-      `SELECT DATE(e.created_at)::text AS day,
+      `SELECT DATE(p.created_at)::text AS day,
               COUNT(*)::int AS pageviews,
-              COUNT(DISTINCT e.visitor_id)::int AS visitors
-       FROM nartalis_events e ${scope} AND e.event_name = 'page_view'
-       GROUP BY DATE(e.created_at)
+              COUNT(DISTINCT p.person_key)::int AS visitors
+       FROM nartalis_person_identity p ${scope} AND p.event_name = 'page_view'
+       GROUP BY DATE(p.created_at)
        ORDER BY day DESC
        ${dailyLimit ? `LIMIT ${dailyLimit}` : ''}`,
     )
@@ -557,24 +699,24 @@ async function handleVisits(ctx: Ctx, dailyLimit: number | null = null) {
 // ───────────────────────────── CTA ─────────────────────────────
 async function handleCta(ctx: Ctx) {
   try {
-    const scope = eventScope(ctx)
+    const scope = personScope(ctx)
 
     const [totals] = await sql.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'cta_view') AS impressions,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'cta_click') AS clicks`,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'cta_view') AS impressions,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'cta_click') AS clicks`,
     )
 
     const [period] = await sql.query(
       `SELECT
-         COUNT(*) FILTER (WHERE e.event_name = 'cta_view' AND e.created_at >= NOW() - INTERVAL '7 days')::int AS view_7d,
-         COUNT(*) FILTER (WHERE e.event_name = 'cta_view' AND e.created_at >= NOW() - INTERVAL '30 days')::int AS view_30d,
-         COUNT(*) FILTER (WHERE e.event_name = 'cta_view' AND e.created_at >= NOW() - INTERVAL '90 days')::int AS view_90d,
-         COUNT(*) FILTER (WHERE e.event_name = 'cta_click' AND e.created_at >= NOW() - INTERVAL '7 days')::int AS click_7d,
-         COUNT(*) FILTER (WHERE e.event_name = 'cta_click' AND e.created_at >= NOW() - INTERVAL '30 days')::int AS click_30d,
-         COUNT(*) FILTER (WHERE e.event_name = 'cta_click' AND e.created_at >= NOW() - INTERVAL '90 days')::int AS click_90d
-       FROM nartalis_events e WHERE e.event_name IN ('cta_view', 'cta_click')
-       ${ctx.exclude ? `AND (e.user_id IS NULL OR ${excludeInternalClause('e.user_id')})` : ''}`,
+         COUNT(*) FILTER (WHERE p.event_name = 'cta_view' AND p.created_at >= NOW() - INTERVAL '7 days')::int AS view_7d,
+         COUNT(*) FILTER (WHERE p.event_name = 'cta_view' AND p.created_at >= NOW() - INTERVAL '30 days')::int AS view_30d,
+         COUNT(*) FILTER (WHERE p.event_name = 'cta_view' AND p.created_at >= NOW() - INTERVAL '90 days')::int AS view_90d,
+         COUNT(*) FILTER (WHERE p.event_name = 'cta_click' AND p.created_at >= NOW() - INTERVAL '7 days')::int AS click_7d,
+         COUNT(*) FILTER (WHERE p.event_name = 'cta_click' AND p.created_at >= NOW() - INTERVAL '30 days')::int AS click_30d,
+         COUNT(*) FILTER (WHERE p.event_name = 'cta_click' AND p.created_at >= NOW() - INTERVAL '90 days')::int AS click_90d
+       FROM nartalis_person_identity p WHERE p.event_name IN ('cta_view', 'cta_click')
+       ${ctx.exclude ? `AND (p.user_id IS NULL OR ${excludeInternalClause('p.user_id')})` : ''}`,
     )
 
     return ok({ exclude: ctx.exclude, range: { from: ctx.from || 'inicio', to: ctx.to || 'hoy' }, totals, period })
@@ -584,33 +726,22 @@ async function handleCta(ctx: Ctx) {
 }
 
 // ───────────────────────────── FUNNEL ─────────────────────────────
-// Funnel principal agregado. Las etapas anónimas (nartalis_events) y las
-// identificadas (farma_search_log, nartalis_users, ...) NO se unen usuario a
-// usuario: la identidad anónima→identificada no es reconstruible. Cada etapa
-// se muestra con su fuente. Activation es una PROPUESTA (candidate): usuarios
-// con ≥1 medicamento guardado.
+// Funnel principal unificado usando identidad canónica (person_key).
+// Ahora SÍ une usuario anónimo → registrado vía person_key.
 async function handleFunnel(ctx: Ctx) {
   try {
-    const scope = eventScope(ctx)
+    const scope = personScope(ctx)
     const searchScopeSql = searchScope(ctx, 'keeps_anon')
     const whereU = tableWhere(ctx, 'u.created_at', 'u.id')
 
     const [anon] = await sql.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'page_view') AS pageviews,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'medicine_view') AS medicine_views,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'medicine_second_view') AS second_interaction,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'cta_view') AS cta_views,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'cta_click') AS cta_clicks,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${scope} AND e.event_name = 'registration_started') AS registration_started`,
-    )
-
-    const [visitsSql] = await sql.query(
-      `SELECT COUNT(*)::int AS visits FROM (
-         SELECT e.visitor_id, e.created_at,
-                LAG(e.created_at) OVER (PARTITION BY e.visitor_id ORDER BY e.created_at) AS prev
-         FROM nartalis_events e ${scope} AND e.event_name = 'page_view' AND e.visitor_id IS NOT NULL
-       ) w WHERE w.prev IS NULL OR w.created_at - w.prev > INTERVAL '30 minutes'`,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'page_view') AS pageviews,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'medicine_view') AS medicine_views,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'medicine_second_view') AS second_interaction,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'cta_view') AS cta_views,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'cta_click') AS cta_clicks,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${scope} AND p.event_name = 'registration_started') AS registration_started`,
     )
 
     const [searchesSql] = await sql.query(
@@ -620,26 +751,39 @@ async function handleFunnel(ctx: Ctx) {
     const [regSql] = await sql.query(
       `SELECT COUNT(*)::int AS registrations,
               COUNT(DISTINCT u.id) FILTER (WHERE r.id IS NOT NULL)::int AS activated
-       FROM nartalis_users u
-       LEFT JOIN nartalis_user_medicamentos r ON r.user_id = u.id
-       ${whereU}`,
+FROM nartalis_users u
+        LEFT JOIN nartalis_user_medicamentos r ON r.user_id = u.id
+        ${whereU}`,
     )
 
     const retention = await computeRetention(ctx)
     const actTotal = regSql?.registrations ?? 0
 
+    // Visits y pageviews usando nartalis_person_identity (person_key + session_id)
+    const [visitsSql] = await sql.query(
+      `SELECT COUNT(*)::int AS visits FROM (
+         SELECT p.session_id, p.created_at,
+                LAG(p.created_at) OVER (PARTITION BY p.session_id ORDER BY p.created_at) AS prev
+         FROM nartalis_person_identity p ${personScope(ctx)} AND p.event_name = 'page_view' AND p.session_id IS NOT NULL
+       ) w WHERE w.prev IS NULL OR w.created_at - w.prev > INTERVAL '30 minutes'`,
+    )
+
+    const [pageviewsSql] = await sql.query(
+      `SELECT COUNT(*)::int AS pageviews FROM nartalis_person_identity p ${personScope(ctx)} AND p.event_name = 'page_view'`,
+    )
+
     return ok({
       exclude: ctx.exclude,
       range: { from: ctx.from || 'inicio', to: ctx.to || 'hoy' },
       stages: {
-        visits: { value: visitsSql?.visits ?? 0, source: 'nartalis_events' },
-        pageviews: { value: anon?.pageviews ?? 0, source: 'nartalis_events' },
-        medicine_views: { value: anon?.medicine_views ?? 0, source: 'nartalis_events' },
+        visits: { value: visitsSql?.visits ?? 0, source: 'nartalis_person_identity' },
+        pageviews: { value: pageviewsSql?.pageviews ?? 0, source: 'nartalis_person_identity' },
+        medicine_views: { value: anon?.medicine_views ?? 0, source: 'nartalis_person_identity' },
         searches: { value: searchesSql?.searches ?? 0, source: 'farma_search_log' },
-        second_interaction: { value: anon?.second_interaction ?? 0, source: 'nartalis_events' },
-        cta_views: { value: anon?.cta_views ?? 0, source: 'nartalis_events' },
-        cta_clicks: { value: anon?.cta_clicks ?? 0, source: 'nartalis_events' },
-        registration_started: { value: anon?.registration_started ?? 0, source: 'nartalis_events' },
+        second_interaction: { value: anon?.second_interaction ?? 0, source: 'nartalis_person_identity' },
+        cta_views: { value: anon?.cta_views ?? 0, source: 'nartalis_person_identity' },
+        cta_clicks: { value: anon?.cta_clicks ?? 0, source: 'nartalis_person_identity' },
+        registration_started: { value: anon?.registration_started ?? 0, source: 'nartalis_person_identity' },
         registrations: { value: regSql?.registrations ?? 0, source: 'nartalis_users' },
         activated: { value: regSql?.activated ?? 0, source: 'nartalis_user_medicamentos', candidate: true, basis: actTotal },
       },
@@ -693,21 +837,21 @@ async function handleOverview(ctx: Ctx) {
 
     const retention = await computeRetention(ctx)
 
-    const eventsScope = eventScope(ctx)
+    // Visits y pageviews usando nartalis_person_identity
     const [visits] = await sql.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM nartalis_events e ${eventsScope} AND e.event_name = 'page_view') AS pageviews,
-         (SELECT COUNT(DISTINCT e.visitor_id)::int FROM nartalis_events e ${eventsScope} AND e.event_name = 'page_view' AND e.visitor_id IS NOT NULL) AS visitors,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${personScope(ctx)} AND p.event_name = 'page_view') AS pageviews,
+         (SELECT COUNT(DISTINCT p.person_key)::int FROM nartalis_person_identity p ${personScope(ctx)} AND p.event_name = 'page_view') AS visitors,
          (SELECT COUNT(*)::int FROM (
-            SELECT e.visitor_id, e.created_at,
-                   LAG(e.created_at) OVER (PARTITION BY e.visitor_id ORDER BY e.created_at) AS prev
-            FROM nartalis_events e ${eventsScope} AND e.event_name = 'page_view' AND e.visitor_id IS NOT NULL
+            SELECT p.session_id, p.created_at,
+                   LAG(p.created_at) OVER (PARTITION BY p.session_id ORDER BY p.created_at) AS prev
+            FROM nartalis_person_identity p ${personScope(ctx)} AND p.event_name = 'page_view' AND p.session_id IS NOT NULL
           ) w WHERE w.prev IS NULL OR w.created_at - w.prev > INTERVAL '30 minutes') AS visits`,
     )
     const [cta] = await sql.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM nartalis_events e ${eventsScope} AND e.event_name = 'cta_click') AS clicks,
-         (SELECT COUNT(*)::int FROM nartalis_events e ${eventsScope} AND e.event_name = 'cta_view') AS impressions`,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${personScope(ctx)} AND p.event_name = 'cta_click') AS clicks,
+         (SELECT COUNT(*)::int FROM nartalis_person_identity p ${personScope(ctx)} AND p.event_name = 'cta_view') AS impressions`,
     )
 
     return ok({
@@ -723,5 +867,5 @@ async function handleOverview(ctx: Ctx) {
     })
   } catch (e) {
     return fail(e)
-  }
+}
 }

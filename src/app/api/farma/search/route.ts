@@ -3,6 +3,7 @@ import { sql } from '@/lib/db';
 import { getNartalisSession } from '@/lib/auth';
 import { cimaBreaker } from '@/lib/circuit-breaker';
 import { ingestPrinciplesBatch, collectPaPairs } from '@/lib/pa-principle';
+import { getTrackingIds, isTestRequest } from '@/lib/search-tracking';
 
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
@@ -73,6 +74,7 @@ function parseSourcePage(v: string | null): string | null {
 // source/source_page registran el origen ('home' | 'medicine_page'); si la
 // migración no estuviera aplicada, se reintenta el INSERT legacy para que el
 // registro de búsquedas NUNCA se pierda.
+// anonymous_id y session_id permiten medir: PERSONA → SESIÓN → ACCIÓN → RETORNO
 async function logSearch(opts: {
   query: string;
   searchType: 'text' | 'voice';
@@ -84,11 +86,13 @@ async function logSearch(opts: {
   fallbackReason?: string | null;
   source?: SearchSource;
   sourcePage?: string | null;
+  anonymousId?: string | null;
+  sessionId?: string | null;
 }) {
   try {
     await sql`
-      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test, used_fallback, fallback_reason, source, source_page)
-      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false}, ${opts.usedFallback ?? false}, ${opts.fallbackReason ?? null}, ${opts.source ?? 'home'}, ${opts.sourcePage ?? null})
+      INSERT INTO farma_search_log (query, search_type, user_id, result_count, was_successful, is_test, used_fallback, fallback_reason, source, source_page, anonymous_id, session_id)
+      VALUES (${opts.query}, ${opts.searchType}, ${opts.userId}, ${opts.resultCount}, ${opts.wasSuccessful}, ${opts.isTest ?? false}, ${opts.usedFallback ?? false}, ${opts.fallbackReason ?? null}, ${opts.source ?? 'home'}, ${opts.sourcePage ?? null}, ${opts.anonymousId ?? null}, ${opts.sessionId ?? null})
     `;
   } catch {
     try {
@@ -235,6 +239,8 @@ async function serveLocalFallback(
   reason: 'cima_unreachable' | 'cima_http_5xx' | 'timeout',
   source: SearchSource = 'home',
   sourcePage: string | null = null,
+  anonymousId?: string | null,
+  sessionId?: string | null,
 ) {
   let rows: { nombre: string; nregistro: string }[];
   try {
@@ -257,6 +263,8 @@ async function serveLocalFallback(
       fallbackReason: reason,
       source,
       sourcePage,
+      anonymousId,
+      sessionId,
     });
   } catch { /* nunca rompe la respuesta */ }
   const body: any = {
@@ -279,7 +287,11 @@ export async function GET(request: NextRequest) {
   const sourcePage = parseSourcePage(request.nextUrl.searchParams.get('source_page'));
 
   // is_test / headers de test: SOLO activos en entornos NO producción.
-  const isTest = process.env.VERCEL_ENV !== 'production' && request.headers.get('x-nartalis-test') === '1';
+  // Usa la utilidad centralizada que también detecta localhost
+  const isTest = isTestRequest(request);
+
+  // Obtener tracking IDs (anonymous_id + session_id) para medir PERSONA → SESIÓN → ACCIÓN
+  const { anonymousId, sessionId } = await getTrackingIds();
   // Simulación de caída de CIMA (solo tests; jamás en producción).
   const forceCimaFail = isTest && request.headers.get('x-force-nartalis-cima-fail') === '1';
 
@@ -315,7 +327,7 @@ export async function GET(request: NextRequest) {
 
   // ─── Circuit breaker: si está abierto, no gastamos el timeout de CIMA ───
   if (!cimaBreaker.shouldAttemptCima()) {
-    return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_unreachable', source, sourcePage);
+    return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_unreachable', source, sourcePage, anonymousId, sessionId);
   }
 
   try {
@@ -329,7 +341,7 @@ export async function GET(request: NextRequest) {
     );
     if (!res.ok) {
       cimaBreaker.onCimaFailure();
-      return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_http_5xx', source, sourcePage);
+      return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_http_5xx', source, sourcePage, anonymousId, sessionId);
     }
     cimaBreaker.onCimaSuccess();
     const data = await res.json();
@@ -346,7 +358,7 @@ export async function GET(request: NextRequest) {
       if (!exactMatch) {
         const correctedBase = (resultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || qLower;
         const similar = isSimilar(q, correctedBase);
-        try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
+        try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage, anonymousId, sessionId }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         if (PRINCIPLE_INGEST_ENABLED) {
           try { await ingestPrinciplesBatch(collectPaPairs(resultados)); } catch { /* silent */ }
@@ -359,7 +371,7 @@ export async function GET(request: NextRequest) {
         });
       }
 
-        try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
+        try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: resultados.length, wasSuccessful: true, isTest, source, sourcePage, anonymousId, sessionId }); } catch {}
         await upsertCacheBatch(resultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
         if (PRINCIPLE_INGEST_ENABLED) {
           try { await ingestPrinciplesBatch(collectPaPairs(resultados)); } catch { /* silent */ }
@@ -382,7 +394,7 @@ export async function GET(request: NextRequest) {
         if (retryResultados.length > 0) {
           const correctedBase = (retryResultados[0].nombre || '').split(/\s+/)[0]?.toLowerCase() || prefix;
           if (!isSimilar(q, correctedBase)) break;
-          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
+          try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: retryResultados.length, wasSuccessful: true, isTest, source, sourcePage, anonymousId, sessionId }); } catch {}
           await upsertCacheBatch(retryResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
            if (PRINCIPLE_INGEST_ENABLED) {
              try { await ingestPrinciplesBatch(collectPaPairs(retryResultados)); } catch { /* silent */ }
@@ -422,7 +434,7 @@ export async function GET(request: NextRequest) {
                 const fuzzyData = await fuzzyRes.json();
                 const fuzzyResultados = mapResultados(fuzzyData);
                 if (fuzzyResultados.length > 0) {
-                  try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest, source, sourcePage }); } catch {}
+                  try { await logSearch({ query: normalizeSearch(correctedBase), searchType, userId, resultCount: fuzzyResultados.length, wasSuccessful: true, isTest, source, sourcePage, anonymousId, sessionId }); } catch {}
                   await upsertCacheBatch(fuzzyResultados.map((r: any) => ({ nombre: r.nombre, registro: r.registro })));
                   if (PRINCIPLE_INGEST_ENABLED) {
                     try { await ingestPrinciplesBatch(collectPaPairs(fuzzyResultados)); } catch { /* silent */ }
@@ -442,12 +454,12 @@ export async function GET(request: NextRequest) {
     }
 
     // ─── Sin resultados en ningún intento — se registra con result_count=0 ───
-    try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false, isTest, source, sourcePage }); } catch {}
+    try { await logSearch({ query: normalizeSearch(q), searchType, userId, resultCount: 0, wasSuccessful: false, isTest, source, sourcePage, anonymousId, sessionId }); } catch {}
     const msg = 'No encontramos "' + q + '" en la base de datos de medicamentos AEMPS. Este producto puede no ser un medicamento registrado en España. Prueba con otro nombre.';
     return respond({ resultados: [], total: 0, message: msg, fallback: false });
   } catch (err) {
     cimaBreaker.onCimaFailure();
     const reason = classifyCimaError(err);
-    return await serveLocalFallback(q, searchType, userId, isTest, respond, reason, source, sourcePage);
+    return await serveLocalFallback(q, searchType, userId, isTest, respond, reason, source, sourcePage, anonymousId, sessionId);
   }
 }

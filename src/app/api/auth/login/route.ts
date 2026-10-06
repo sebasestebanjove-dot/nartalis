@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { sql } from '@/lib/db'
 import { verifyPassword, createNartalisSession } from '@/lib/auth'
+
+const ANONYMOUS_ID_COOKIE = 'nartalis_anon_id'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -39,7 +42,25 @@ export async function POST(req: Request) {
              status, plan, role, email_verified, created_at::text, last_login_at::text
       FROM nartalis_users WHERE id = ${u.id}
     `
+
+    // Obtener anonymous_id de la cookie ANTES de crear la sesión
+    const cookieStore = await cookies()
+    const anonymousId = cookieStore.get('nartalis_anon_id')?.value ?? null
+
     await createNartalisSession(fresh)
+
+    // Vincular identidad anónima al usuario que hace login
+    if (anonymousId) {
+      try {
+        await sql.query(
+          `INSERT INTO nartalis_identity_map (anonymous_id, visitor_id, user_id)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (anonymous_id, user_id) DO NOTHING`,
+          [anonymousId, null, fresh.id]
+        )
+      } catch { /* silencioso */ }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('nartalis login error:', err)

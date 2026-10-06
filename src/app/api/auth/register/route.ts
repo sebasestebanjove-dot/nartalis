@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { sql } from '@/lib/db'
 import { hashPassword, createNartalisSession } from '@/lib/auth'
+import { linkAnonymousToUser } from '@/lib/identity'
+
+const ANONYMOUS_ID_COOKIE = 'nartalis_anon_id'
+const SESSION_ID_COOKIE = 'nartalis_session_id'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -44,7 +49,25 @@ export async function POST(req: Request) {
 
     await sql`UPDATE nartalis_users SET last_login_at = NOW() WHERE id = ${user.id}`
 
+    // Obtener tracking IDs de las cookies ANTES de crear la sesión (que puede sobrescribir cookies)
+    const cookieStore = await cookies()
+    const anonymousId = cookieStore.get('nartalis_anon_id')?.value ?? null
+    const visitorId = null // visitor_id viene de localStorage client-side, no de cookie
+
     await createNartalisSession(user)
+
+    // Vincular identidad anónima al nuevo usuario registrado
+    if (anonymousId) {
+      try {
+        await sql.query(
+          `INSERT INTO nartalis_identity_map (anonymous_id, visitor_id, user_id)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (anonymous_id, user_id) DO NOTHING`,
+          [anonymousId, null, user.id]
+        )
+      } catch { /* silencioso */ }
+    }
+
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('nartalis register error:', err)

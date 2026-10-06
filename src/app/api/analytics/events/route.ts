@@ -1,20 +1,20 @@
 import { NextRequest } from 'next/server'
 import { sql } from '@/lib/db'
 import { getNartalisSession } from '@/lib/auth'
+import { getTrackingIds } from '@/lib/search-tracking'
+import { resolveIdentity, linkAnonymousToUser } from '@/lib/identity'
 
-// POST /api/analytics/events — beacon de eventos de producto (funnel anónimo).
+// POST /api/analytics/events — beacon de eventos de producto (funnel unificado).
 // Recibe eventos de alto valor del cliente, valida estrictamente (whitelist,
-// sin PII) y los persiste en nartalis_events. NUNCA rompe la interacción:
-// responde 204 incluso si el INSERT falla.
+// sin PII) y los persiste en nartalis_events con identidad unificada.
+// NUNCA rompe la interacción: responde 204 incluso si el INSERT falla.
 //
-// Seguridad/privacidad:
-//  - event_name de whitelist cerrada.
-//  - page = pathname sanitizado (sin query/fragment), máx 200 chars.
-//  - nregistro numérico/alnum corto (CIMA), máx 10 chars.
-//  - source de whitelist.
-//  - visitor_id UUID opcional; se acepta pero no se usa para unir con la
-//    identidad registrada (anonymous → identified no es reconstruible).
-//  - user_id SIEMPRE resuelto server-side desde la sesión (nunca del cliente).
+// Identidad unificada:
+//  - anonymous_id: identidad anónima principal (cookie HttpOnly, 1 año)
+//  - session_id: sesión unificada (30 min inactividad) - MISMA que farma_search_log
+//  - user_id: solo si hay sesión real (server-side)
+//  - visitor_id: mantenido por compatibilidad histórica
+//  - person_key: identidad canónica resuelta (user:<id> | anon:<id>)
 
 const EVENT_NAMES = new Set([
   'page_view',
@@ -55,9 +55,21 @@ export async function POST(req: NextRequest) {
   }
   const source = typeof payload.source === 'string' && SOURCES.has(payload.source) ? payload.source : null
 
+  // visitor_id mantenido por compatibilidad (client-side localStorage)
   let visitorId: string | null = null
   if (typeof payload.visitor_id === 'string' && UUID_RE.test(payload.visitor_id)) {
     visitorId = payload.visitor_id
+  }
+
+  // anonymous_id y session_id: preferir server-side (cookies HttpOnly)
+  // El cliente puede enviarlos, pero server-side tiene prioridad
+  let anonymousId: string | null = null
+  if (typeof payload.anonymous_id === 'string' && UUID_RE.test(payload.anonymous_id)) {
+    anonymousId = payload.anonymous_id
+  }
+  let sessionId: string | null = null
+  if (typeof payload.session_id === 'string' && UUID_RE.test(payload.session_id)) {
+    sessionId = payload.session_id
   }
 
   // user_id solo si hay sesión real (server-side).
@@ -67,10 +79,49 @@ export async function POST(req: NextRequest) {
     userId = session?.id ?? null
   } catch { /* sin sesión */ }
 
+  // Resolver identidad canónica: obtener tracking IDs server-side como fallback
+  let trackingAnonymousId: string | null = null
+  let trackingSessionId: string | null = null
+  try {
+    const tracking = await getTrackingIds()
+    trackingAnonymousId = tracking.anonymousId
+    trackingSessionId = tracking.sessionId
+  } catch { /* sin tracking */ }
+
+  // Prioridad: client payload > server tracking
+  anonymousId = anonymousId ?? trackingAnonymousId
+  sessionId = sessionId ?? trackingSessionId
+
+  // Si hay user_id (usuario logueado) y anonymous_id, vincular en identity_map
+  if (userId && (anonymousId || visitorId)) {
+    try {
+      await linkAnonymousToUser({ anonymousId, visitorId, userId })
+    } catch { /* silencioso */ }
+  }
+
+  // Resolver identidad canónica para métricas
+  let resolved: { personKey: string; userId: string | null; anonymousId: string | null; sessionId: string | null } | null = null
+  try {
+    const identity = await resolveIdentity({ anonymousId, visitorId, userId, sessionId })
+    resolved = {
+      personKey: identity.personKey,
+      userId: identity.userId,
+      anonymousId: identity.anonymousId,
+      sessionId: identity.sessionId,
+    }
+  } catch { /* silencioso */ }
+
   try {
     await sql`
-      INSERT INTO nartalis_events (event_name, visitor_id, user_id, page, nregistro, source)
-      VALUES (${eventName}, ${visitorId}, ${userId}, ${page}, ${nregistro}, ${source})
+      INSERT INTO nartalis_events (
+        event_name, visitor_id, user_id, page, nregistro, source,
+        anonymous_id, session_id
+      )
+      VALUES (
+        ${eventName}, ${visitorId}, ${resolved?.userId ?? userId}, 
+        ${page}, ${nregistro}, ${source},
+        ${resolved?.anonymousId ?? anonymousId}, ${resolved?.sessionId ?? sessionId}
+      )
     `
   } catch (err) {
     console.error('analytics events insert error:', err)
