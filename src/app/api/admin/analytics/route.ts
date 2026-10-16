@@ -162,17 +162,25 @@ async function handleSearch(ctx: Ctx) {
            WHEN '6-10' THEN 4 WHEN '11-20' THEN 5 WHEN '21-50' THEN 6 ELSE 7 END`,
     )
 
-    // Top sesiones con más búsquedas
+    // Top sesiones con más búsquedas. El límite de 5 consultas por sesión se
+    // aplica con DENSE_RANK en subconsulta (LIMIT no es válido dentro de
+    // STRING_AGG ni puede haber dos WHERE). Conserva DISTINCT, orden
+    // alfabético y el mismo contrato de salida (top_queries nullable).
     const topSessions = await sql.query(
-      `SELECT 
+      `SELECT
          session_id,
          MIN(created_at)::text AS first_search,
          MAX(created_at)::text AS last_search,
          COUNT(*)::int AS searches,
          COUNT(DISTINCT CASE WHEN user_id IS NULL THEN anonymous_id ELSE user_id END)::int AS persons,
-         STRING_AGG(DISTINCT LOWER(TRIM(query)), ', ' ORDER BY LOWER(TRIM(query)) LIMIT 5) AS top_queries
-       FROM farma_search_log ${scope}
-       WHERE session_id IS NOT NULL
+         STRING_AGG(DISTINCT qnorm, ', ' ORDER BY qnorm) FILTER (WHERE qrank <= 5 AND qnorm IS NOT NULL AND qnorm <> '') AS top_queries
+       FROM (
+         SELECT session_id, created_at, user_id, anonymous_id,
+                LOWER(TRIM(query)) AS qnorm,
+                DENSE_RANK() OVER (PARTITION BY session_id ORDER BY LOWER(TRIM(query)) NULLS LAST) AS qrank
+         FROM farma_search_log ${scope}
+           AND session_id IS NOT NULL
+       ) x
        GROUP BY session_id
        ORDER BY searches DESC
        LIMIT 20`,
@@ -484,19 +492,25 @@ async function handleRetention(ctx: Ctx) {
 // Cohortes unificadas: personas (person_key) con primera actividad en el rango.
 // Retorno: cualquier evento posterior (page_view, medicine_view, search, cta_click, etc.)
 async function computeRetention(ctx: Ctx): Promise<{ exclude: boolean; cohort: number; d1: number; d7: number; d30: number; anon_cohort: number; anon_d1: number; anon_d7: number; anon_d30: number; reg_cohort: number; reg_d1: number; reg_d7: number; reg_d30: number }> {
-  const personScopeSql = personScope(ctx)
   const whereU = tableWhere(ctx, 'u.created_at', 'u.id')
 
-  // 1. Cohorte anónima: person_key = 'anon:*' con primera actividad
+  // 1. Cohorte anónima: person_key = 'anon:*' con primera actividad.
+  // Alcance calificado con `p.` (misma semántica que personScope): sin
+  // calificar, `created_at`/`user_id` son ambiguos con `p2` y PostgreSQL
+  // rechaza la consulta. El lado `p2` (retorno) queda sin filtrar, igual
+  // que antes. dateAnd/excludeInternalClause aceptan la columna ya
+  // calificada (interpolación directa).
+  const pScope = 'WHERE 1=1' + dateAnd(ctx, 'p.created_at')
+    + (ctx.exclude ? ` AND (p.user_id IS NULL OR ${excludeInternalClause('p.user_id')})` : '')
   const anonRows = await sql.query(
     `SELECT p.person_key,
             MIN(p.created_at) AS first_at,
             MIN(CASE WHEN p2.created_at > p.created_at THEN p2.created_at END) AS return_at
      FROM nartalis_person_identity p
-     LEFT JOIN nartalis_person_identity p2 
-       ON p.person_key = p2.person_key 
+     LEFT JOIN nartalis_person_identity p2
+       ON p.person_key = p2.person_key
       AND p2.created_at > p.created_at
-     ${personScopeSql}
+     ${pScope}
      AND p.person_key LIKE 'anon:%'
      GROUP BY p.person_key
      HAVING MIN(p.created_at) IS NOT NULL`,
