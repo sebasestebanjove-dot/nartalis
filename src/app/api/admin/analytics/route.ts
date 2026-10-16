@@ -3,6 +3,7 @@ import { sql } from '@/lib/db'
 import { requireAdmin, adminUnauthorized } from '@/lib/admin'
 import { excludeInternalClause } from '@/lib/analytics-exclusion'
 import { getGa4Availability } from '@/lib/ga4'
+import { computeRetentionMetrics, type PersonDayActivity } from '@/lib/retention-metrics'
 
 // GET /api/admin/analytics?section=overview|search|med-engagement|botiquin|conversion|retention|fuentes&exclude=1|0
 // Métricas agregadas de producto calculadas desde Neon. Solo ADMIN.
@@ -489,83 +490,77 @@ async function handleRetention(ctx: Ctx) {
   }
 }
 
-// Cohortes unificadas: personas (person_key) con primera actividad en el rango.
-// Retorno: cualquier evento posterior (page_view, medicine_view, search, cta_click, etc.)
-async function computeRetention(ctx: Ctx): Promise<{ exclude: boolean; cohort: number; d1: number; d7: number; d30: number; anon_cohort: number; anon_d1: number; anon_d7: number; anon_d30: number; reg_cohort: number; reg_d1: number; reg_d7: number; reg_d30: number }> {
-  const whereU = tableWhere(ctx, 'u.created_at', 'u.id')
+// Cohortes de recurrencia: uso recurrente + D1/D7/D30 exactas.
+// Metodología forense: cohorte = personas con primer día de actividad en el
+// rango; retorno válido = día natural UTC posterior al inicial con actividad
+// significativa (búsqueda, consulta, botiquín, medicine_view; nunca
+// cta_click: un clic en el CTA no demuestra uso del producto),
+// sesión distinta (desde 2026-10-06, cuando existe session_id) o fallback
+// por día distinto pre-2026-10-06. Sin maduración no hay abandono: los
+// denominadores solo incluyen personas elegibles. El cálculo puro vive en
+// `@/lib/retention-metrics` (testeable sin DB); aquí solo se recogen filas
+// { person, day, kind } de las cuatro fuentes reales con rango y exclusión.
+async function computeRetention(ctx: Ctx): Promise<{ exclude: boolean; cohort: number; eligible: number; recurrent: number; elig_d1: number; ret_d1: number; elig_d7: number; ret_d7: number; elig_d30: number; ret_d30: number }> {
+  const today = new Date().toISOString().slice(0, 10)
+  const rows: PersonDayActivity[] = []
+  const push = (person: unknown, day: unknown, kind: PersonDayActivity['kind']) => {
+    if (typeof person !== 'string' || !person || typeof day !== 'string' || !day) return
+    rows.push({ person, day, kind })
+  }
 
-  // 1. Cohorte anónima: person_key = 'anon:*' con primera actividad.
-  // Alcance calificado con `p.` (misma semántica que personScope): sin
-  // calificar, `created_at`/`user_id` son ambiguos con `p2` y PostgreSQL
-  // rechaza la consulta. El lado `p2` (retorno) queda sin filtrar, igual
-  // que antes. dateAnd/excludeInternalClause aceptan la columna ya
-  // calificada (interpolación directa).
+  // 1. Eventos de producto (vista con fan-out corregido en migración 030).
+  // pScope calificado con `p.` (ver comentario original): evita ambigüedad.
   const pScope = 'WHERE 1=1' + dateAnd(ctx, 'p.created_at')
     + (ctx.exclude ? ` AND (p.user_id IS NULL OR ${excludeInternalClause('p.user_id')})` : '')
-  const anonRows = await sql.query(
-    `SELECT p.person_key,
-            MIN(p.created_at) AS first_at,
-            MIN(CASE WHEN p2.created_at > p.created_at THEN p2.created_at END) AS return_at
-     FROM nartalis_person_identity p
-     LEFT JOIN nartalis_person_identity p2
-       ON p.person_key = p2.person_key
-      AND p2.created_at > p.created_at
-     ${pScope}
-     AND p.person_key LIKE 'anon:%'
-     GROUP BY p.person_key
-     HAVING MIN(p.created_at) IS NOT NULL`,
-  )
-
-  // 2. Cohorte registrada: user_id con primera actividad (registro o primera actividad)
-  const regRows = await sql.query(
-    `SELECT u.id AS person_key,
-            u.created_at AS first_at,
-            COALESCE(
-              (SELECT MIN(s.created_at) FROM farma_search_log s WHERE s.user_id = u.id AND s.created_at > u.created_at),
-              (SELECT MIN(c.consulted_at) FROM nartalis_user_consultas c WHERE c.user_id = u.id AND c.consulted_at > u.created_at),
-              (SELECT MIN(m.created_at) FROM nartalis_user_medicamentos m WHERE m.user_id = u.id AND m.created_at > u.created_at),
-              (SELECT MIN(p.created_at) FROM nartalis_person_identity p WHERE p.user_id = u.id AND p.created_at > u.created_at)
-            ) AS return_at
-     FROM nartalis_users u ${whereU}`,
-  )
-
-  const parse = (v: unknown): number => {
-    if (v instanceof Date) return v.getTime()
-    if (typeof v === 'string') return new Date(v + (v.includes('T') ? 'Z' : 'T00:00:00Z')).getTime()
-    return NaN
+  const viewDays = await sql.query(
+    `SELECT p.person_key AS person, DATE(p.created_at)::text AS day,
+            BOOL_OR(p.event_name IN ('medicine_view', 'medicine_second_view')) AS sig,
+            BOOL_OR(p.session_id IS NOT NULL) AS sess,
+            BOOL_OR(p.event_name IN ('page_view', 'medicine_view', 'medicine_second_view')
+              AND p.session_id IS NULL AND p.created_at < '2026-10-06'::timestamp) AS legacy
+     FROM nartalis_person_identity p ${pScope} AND p.person_key IS NOT NULL
+     GROUP BY p.person_key, DATE(p.created_at)`,
+  ) as { person: string; day: string; sig: boolean; sess: boolean; legacy: boolean }[]
+  for (const r of viewDays) {
+    if (r.sig) push(r.person, r.day, 'significant')
+    if (r.sess) push(r.person, r.day, 'session')
+    if (r.legacy) push(r.person, r.day, 'legacy')
+    push(r.person, r.day, 'other')
   }
 
-  let anon_d1 = 0, anon_d7 = 0, anon_d30 = 0
-  for (const r of anonRows) {
-    if (!r.return_at) continue
-    const ret = parse(r.return_at)
-    const created = parse(r.first_at)
-    if (ret <= created + 1 * 24 * 60 * 60 * 1000) anon_d1++
-    if (ret <= created + 7 * 24 * 60 * 60 * 1000) anon_d7++
-    if (ret <= created + 30 * 24 * 60 * 60 * 1000) anon_d30++
-  }
+  // 2. Búsquedas válidas (siempre sin tests; identificados no internos).
+  // Clave canónica 'user:'/'anon:' idéntica a la de la vista: la misma
+  // persona no se duplica entre fuentes. Sin anonymous_id ni user_id no hay
+  // atribución posible y la fila se descarta (no inventa identidad).
+  const sScope = 'WHERE 1=1' + dateAnd(ctx, 'created_at')
+    + ` AND (is_test IS NULL OR is_test = false)`
+    + (ctx.exclude ? ` AND (user_id IS NULL OR ${excludeInternalClause('user_id')})` : '')
+  const searchDays = await sql.query(
+    `SELECT CASE WHEN user_id IS NOT NULL THEN 'user:' || user_id::text ELSE 'anon:' || anonymous_id::text END AS person,
+            DATE(created_at)::text AS day
+     FROM farma_search_log ${sScope}
+       AND (user_id IS NOT NULL OR anonymous_id IS NOT NULL)
+     GROUP BY 1, 2`,
+  ) as { person: string; day: string }[]
+  for (const r of searchDays) push(r.person, r.day, 'significant')
 
-  let reg_d1 = 0, reg_d7 = 0, reg_d30 = 0
-  for (const r of regRows) {
-    if (!r.return_at) continue
-    const ret = parse(r.return_at)
-    const created = parse(r.first_at)
-    if (ret <= created + 1 * 24 * 60 * 60 * 1000) reg_d1++
-    if (ret <= created + 7 * 24 * 60 * 60 * 1000) reg_d7++
-    if (ret <= created + 30 * 24 * 60 * 60 * 1000) reg_d30++
-  }
+  // 3 y 4. Uso identificado del producto: consultas de fichas y botiquín.
+  // tableWhere ya excluye cuentas internas cuando el flag está activo.
+  const consultDays = await sql.query(
+    `SELECT 'user:' || c.user_id::text AS person, DATE(c.consulted_at)::text AS day
+     FROM nartalis_user_consultas c ${tableWhere(ctx, 'c.consulted_at', 'c.user_id')}
+     GROUP BY 1, 2`,
+  ) as { person: string; day: string }[]
+  for (const r of consultDays) push(r.person, r.day, 'significant')
+  const medDays = await sql.query(
+    `SELECT 'user:' || m.user_id::text AS person, DATE(m.created_at)::text AS day
+     FROM nartalis_user_medicamentos m ${tableWhere(ctx, 'm.created_at', 'm.user_id')}
+     GROUP BY 1, 2`,
+  ) as { person: string; day: string }[]
+  for (const r of medDays) push(r.person, r.day, 'significant')
 
-  const cohort = anonRows.length + regRows.length
-  const d1 = anon_d1 + reg_d1
-  const d7 = anon_d7 + reg_d7
-  const d30 = anon_d30 + reg_d30
-
-  return { 
-    exclude: ctx.exclude, 
-    cohort, d1, d7, d30,
-    anon_cohort: anonRows.length, anon_d1, anon_d7, anon_d30,
-    reg_cohort: regRows.length, reg_d1, reg_d7, reg_d30
-  }
+  const m = computeRetentionMetrics(rows, today)
+  return { exclude: ctx.exclude, ...m }
 }
 
 // ───────────────────────────── FUENTES ─────────────────────────────

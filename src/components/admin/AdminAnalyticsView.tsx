@@ -99,6 +99,17 @@ function pct(part: number, total: number): number | null {
   return Math.round((part / total) * 100)
 }
 
+// Estado de una celda de retención con denominador elegible:
+// Sin datos (sin cohorte), Cohorte no madura (sin elegibles),
+// Muestra insuficiente (elegibles < 5) o porcentaje con n/N.
+function retState(ret: number, elig: number, cohort: number): string {
+  if (!cohort) return 'Sin datos'
+  if (elig <= 0) return 'Cohorte no madura'
+  if (elig < 5) return `Muestra insuficiente (${elig}<5)`
+  const v = pct(ret, elig)
+  return v === null ? '—' : `${v}% (${ret}/${elig})`
+}
+
 function pctLabel(part: number, total: number): string {
   const v = pct(part, total)
   return v === null ? '—' : `${v}%`
@@ -122,7 +133,7 @@ interface OverviewUsers { total: number; new_30d: number }
 interface OverviewSearch { total: number; with_results: number; anonymous: number; last_7d: number; last_30d: number; last_90d: number }
 interface OverviewProduct { saved: number; users_meds: number; consultas: number; users_consultas: number; activated: number }
 interface OverviewConversion { registered: number; with_consulta: number; with_med: number }
-interface OverviewRetention { cohort: number; d1: number; d7: number; d30: number }
+interface OverviewRetention { cohort: number; eligible: number; recurrent: number; elig_d1: number; ret_d1: number; elig_d7: number; ret_d7: number; elig_d30: number; ret_d30: number }
 interface OverviewVisits { pageviews: number; visitors: number; visits: number }
 interface OverviewCta { clicks: number; impressions: number }
 interface OverviewData { exclude: boolean; users: OverviewUsers; search: OverviewSearch; product: OverviewProduct; conversion: OverviewConversion; retention: OverviewRetention; visits: OverviewVisits; cta: OverviewCta }
@@ -157,7 +168,7 @@ interface ConversionFunnel { registered: number; with_consulta: number; with_med
 interface ActivationData { activated: number; activated_7d: number; activated_30d: number }
 interface ConversionData { exclude: boolean; registration: RegistrationData; funnel: ConversionFunnel; activation: ActivationData }
 
-interface RetentionData { exclude: boolean; cohort: number; d1: number; d7: number; d30: number }
+interface RetentionData { exclude: boolean; cohort: number; eligible: number; recurrent: number; elig_d1: number; ret_d1: number; elig_d7: number; ret_d7: number; elig_d30: number; ret_d30: number }
 
 interface FuentesData { exclude: boolean; bySource: SearchSource[]; bySourcePage: SearchSource[]; topQueries: { query: string; n: number; with_results: number }[] }
 
@@ -276,9 +287,9 @@ function OverviewView({ d }: { d: OverviewData }) {
   const v = d.visits
   const cta = d.cta
 
-  // Ceros informativos / muestra suficiente.
-  const cohortEnough = r && r.cohort >= 5
-  const d30 = r && r.cohort ? (cohortEnough ? `${pct(r.d30, r.cohort)}%` : '0% — muestra insuficiente') : 'Sin datos'
+  // Ceros informativos / muestra suficiente (nueva metodología: estados
+  // por denominador elegible; ver retState).
+  const cohort = r?.cohort ?? 0
 
   return (
     <div>
@@ -329,10 +340,11 @@ function OverviewView({ d }: { d: OverviewData }) {
           <SourceBadge source="Neon" />
         </div>
         <div style={adminS.grid}>
-          <KpiBox label="Cohorte" kpiValue={fmt0(r?.cohort)} state={r && r.cohort < 5 ? 'muestra pequeña: métricas no significativas' : undefined} src="Neon" />
-          <KpiBox label="D1" kpiValue={r && r.cohort ? (cohortEnough ? `${pct(r.d1, r.cohort)}%` : '0% — muestra insuficiente') : 'Sin datos'} src="Neon" />
-          <KpiBox label="D7" kpiValue={r && r.cohort ? (cohortEnough ? `${pct(r.d7, r.cohort)}%` : '0% — muestra insuficiente') : 'Sin datos'} src="Neon" />
-          <KpiBox label="D30" kpiValue={d30} src="Neon" />
+          <KpiBox label="Cohorte" kpiValue={fmt0(r?.cohort)} state={r ? `${fmt0(r.eligible)} elegibles para recurrencia` : undefined} src="Neon" />
+          <KpiBox label="Uso recurrente" kpiValue={r ? retState(r.recurrent, r.eligible, cohort) : 'Sin datos'} state="retorno en día distinto" color={A.green} src="Neon" />
+          <KpiBox label="D1 exacta" kpiValue={r ? retState(r.ret_d1, r.elig_d1, cohort) : 'Sin datos'} src="Neon" />
+          <KpiBox label="D7 exacta" kpiValue={r ? retState(r.ret_d7, r.elig_d7, cohort) : 'Sin datos'} src="Neon" />
+          <KpiBox label="D30 exacta" kpiValue={r ? retState(r.ret_d30, r.elig_d30, cohort) : 'Sin datos'} src="Neon" />
         </div>
       </div>
 
@@ -554,22 +566,25 @@ function ConversionView({ d }: { d: ConversionData }) {
 }
 
 // ───────────────────────── RETENCIÓN ─────────────────────────
+// Nueva metodología: uso recurrente + D1/D7/D30 exactas con denominadores
+// elegibles. Los porcentajes antiguos («cualquier evento posterior») se
+// conservan solo como histórico no comparable fuera de este panel.
 function RetentionView({ d }: { d: RetentionData }) {
   const cohort = d?.cohort ?? 0
-  const enough = cohort >= 5
-  const cell = (n?: number) => cohort ? (enough ? `${pct(n ?? 0, cohort)}%` : '0% — muestra insuficiente') : 'Sin datos'
   return (
     <div>
       <div style={adminS.sectionTitle}>Retención (Neon)</div>
       <div style={adminS.grid}>
-        <KpiBox label="Tamaño de cohorte" kpiValue={fmt0(cohort)} state={cohort && cohort < 5 ? 'menos de 5 — métricas no significativas' : undefined} src="Neon" />
-        <KpiBox label="D1" kpiValue={cell(d?.d1)} src="Neon" />
-        <KpiBox label="D7" kpiValue={cell(d?.d7)} src="Neon" />
-        <KpiBox label="D30" kpiValue={cell(d?.d30)} src="Neon" />
+        <KpiBox label="Cohorte" kpiValue={fmt0(cohort)} state={d ? `${fmt0(d.eligible)} elegibles para recurrencia` : undefined} src="Neon" />
+        <KpiBox label="Uso recurrente" kpiValue={retState(d?.recurrent ?? 0, d?.eligible ?? 0, cohort)} state="retorno significativo en día distinto" color={A.green} src="Neon" />
+        <KpiBox label="D1 exacta" kpiValue={retState(d?.ret_d1 ?? 0, d?.elig_d1 ?? 0, cohort)} src="Neon" />
+        <KpiBox label="D7 exacta" kpiValue={retState(d?.ret_d7 ?? 0, d?.elig_d7 ?? 0, cohort)} src="Neon" />
+        <KpiBox label="D30 exacta" kpiValue={retState(d?.ret_d30 ?? 0, d?.elig_d30 ?? 0, cohort)} src="Neon" />
       </div>
       <Note>
-        Retorno por preferencia: búsqueda → consulta → modificación del botiquín, tras el registro. Con cohortes menores a 5 se muestra «muestra
-        insuficiente», nunca un porcentaje engañoso. Volumen actual (3 usuarios) es insuficiente para significación.
+        Retorno significativo: búsqueda, consulta, botiquín, ficha vista o nueva sesión, en día natural distinto al primero
+        (UTC). Sin maduración no hay abandono: solo las personas elegibles entran en cada denominador.
+        Con denominadores elegibles menores a 5 se muestra «muestra insuficiente», nunca un porcentaje engañoso.
       </Note>
     </div>
   )
@@ -747,13 +762,14 @@ function FunnelView({ d }: { d: FunnelData }) {
         })}
       </div>
       <div style={adminS.section}>
-        <div style={{ ...adminS.sectionTitle, fontSize: 15 }}>Retención (cohorte identificada)</div>
+        <div style={{ ...adminS.sectionTitle, fontSize: 15 }}>Retención (uso recurrente)</div>
         {d.retention ? (
           <div style={adminS.grid}>
             <KpiBox label="Cohorte" kpiValue={fmt0(d.retention.cohort)} src="Neon" />
-            <KpiBox label="D1" kpiValue={d.retention.cohort >= 5 ? `${pct(d.retention.d1, d.retention.cohort)}%` : 'muestra insuficiente'} src="Neon" />
-            <KpiBox label="D7" kpiValue={d.retention.cohort >= 5 ? `${pct(d.retention.d7, d.retention.cohort)}%` : 'muestra insuficiente'} src="Neon" />
-            <KpiBox label="D30" kpiValue={d.retention.cohort >= 5 ? `${pct(d.retention.d30, d.retention.cohort)}%` : 'muestra insuficiente'} src="Neon" />
+            <KpiBox label="Uso recurrente" kpiValue={retState(d.retention.recurrent, d.retention.eligible, d.retention.cohort)} color={A.green} src="Neon" />
+            <KpiBox label="D1 exacta" kpiValue={retState(d.retention.ret_d1, d.retention.elig_d1, d.retention.cohort)} src="Neon" />
+            <KpiBox label="D7 exacta" kpiValue={retState(d.retention.ret_d7, d.retention.elig_d7, d.retention.cohort)} src="Neon" />
+            <KpiBox label="D30 exacta" kpiValue={retState(d.retention.ret_d30, d.retention.elig_d30, d.retention.cohort)} src="Neon" />
           </div>
         ) : <div style={adminS.empty}>Sin datos.</div>}
       </div>
