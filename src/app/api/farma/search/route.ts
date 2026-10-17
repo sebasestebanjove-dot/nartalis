@@ -325,6 +325,32 @@ export async function GET(request: NextRequest) {
     userId = session?.id ?? null;
   } catch { /* sin sesión → búsqueda anónima */ }
 
+  // ─── Modo log_only: registrar una búsqueda ya resuelta sin tocar CIMA ───
+  // Se usa cuando el usuario SELECCIONA un medicamento del autocompletado
+  // (SearchScreen.selectSuggestion). La selección es, semánticamente, una
+  // búsqueda exitosa: el usuario escribió, encontró y eligió su medicamento.
+  // El autocompletado (suggest) es read-only por diseño y no escribe en
+  // Neon; en su lugar el cliente dispara este modo fire-and-forget al
+  // confirmar la selección. Salta CIMA, la caché y la ingestión: solo
+  // INSERTA 1 fila en farma_search_log. Nunca rompe la respuesta.
+  if (request.nextUrl.searchParams.get('log_only') === '1') {
+    try {
+      await logSearch({
+        query: normalizeSearch(q),
+        searchType,
+        userId,
+        resultCount: 1,
+        wasSuccessful: true,
+        isTest,
+        source,
+        sourcePage,
+        anonymousId,
+        sessionId,
+      });
+    } catch { /* el logging nunca rompe la respuesta */ }
+    return respond({ logged: true });
+  }
+
   // ─── Circuit breaker: si está abierto, no gastamos el timeout de CIMA ───
   if (!cimaBreaker.shouldAttemptCima()) {
     return await serveLocalFallback(q, searchType, userId, isTest, respond, 'cima_unreachable', source, sourcePage, anonymousId, sessionId);

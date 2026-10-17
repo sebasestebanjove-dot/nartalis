@@ -147,6 +147,20 @@ export default function SearchScreen({ onSearch, initialQuery = '', onPersonalSp
 
   const selectSuggestion = (item: Suggestion) => {
     closeSuggest();
+    // La selección del autocompletado es, semánticamente, una búsqueda
+    // exitosa (el usuario escribió, encontró y eligió su medicamento).
+    // Debe registrarse igual que la búsqueda por Intro: farma_search_log
+    // (modo log_only, sin coste CIMA) + evento GA4. Fire-and-forget con
+    // keepalive para que el INSERT sobreviva al router.push.
+    fetch(
+      `/api/farma/search?q=${encodeURIComponent(item.nombre)}&type=text&source=home&source_page=/&log_only=1`,
+      { keepalive: true },
+    ).catch(() => {});
+    track('search_completed', {
+      search_type: 'text',
+      result_count: 1,
+      was_successful: true,
+    });
     setQuery('');
     router.push(`/prospectos/${makeSlug(item.nombre, item.registro)}`);
   };
