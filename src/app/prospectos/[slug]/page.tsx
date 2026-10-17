@@ -387,20 +387,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   let m = nregistro ? await getByRegistro(nregistro) : null;
   if (!m && namePart) m = await fetchMedicamento(namePart);
-  if (!m) return { title: 'Medicamento no encontrado — Nartalis' };
+  if (!m) {
+    return {
+      title: 'Medicamento no encontrado — Nartalis',
+      description: 'Busca y consulta prospectos oficiales de medicamentos autorizados por la AEMPS en el botiquín digital Nartalis.',
+    };
+  }
 
-  const title = `${m.nombre} — Prospecto | Nartalis`;
+  const title = `${m.nombre}: Prospecto, posología y usos | Nartalis`;
   const canonical = `${SITE_URL}/prospectos/${makeSlug(m.nombre, m.registro)}`;
 
-  const principio = m.pactivos || m.principiosActivos?.[0]?.nombre || null;
-
-  const descParts: string[] = [];
-  descParts.push(`Información de ${m.nombre}`);
-  if (principio) descParts.push(`principio activo: ${principio}`);
-  if (m.laboratorio) descParts.push(`laboratorio: ${m.laboratorio}`);
-  if (m.dosis) descParts.push(`dosis: ${m.dosis}`);
-  descParts.push('prospecto oficial y datos basados en fuentes de la AEMPS.');
-  const description = descParts.join(', ');
+  const principio = m.pactivos || (m.principiosActivos && m.principiosActivos[0]?.nombre) || '';
+  const descPrincipioText = principio ? ` (${principio})` : '';
+  const description = `Consulta el prospecto oficial de ${m.nombre}${descPrincipioText}. Descubre para qué sirve, posología recomendada, efectos secundarios y estado AEMPS en Nartalis.`;
 
   return {
     title,
