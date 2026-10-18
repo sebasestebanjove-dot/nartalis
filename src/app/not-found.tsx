@@ -47,22 +47,24 @@ export default function NotFound() {
           ))}
         </div>
 
-        <div className="pt-8 border-t border-gray-200">
-          <p className="text-xs text-gray-500 mb-4 uppercase tracking-wider font-semibold">
-            Consultas frecuentes
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {featuredMeds.map((med) => (
-              <Link
-                key={med.name}
-                href={med.href}
-                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-full text-xs font-medium hover:bg-blue-100 hover:text-blue-700 transition-colors"
-              >
-                {med.name}
-              </Link>
-            ))}
+        {featuredMeds.length > 0 && (
+          <div className="pt-8 border-t border-gray-200">
+            <p className="text-xs text-gray-500 mb-4 uppercase tracking-wider font-semibold">
+              Consultas frecuentes
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {featuredMeds.map((med) => (
+                <Link
+                  key={med.name}
+                  href={med.href}
+                  className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-full text-xs font-medium hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                >
+                  {med.name}
+                </Link>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
