@@ -10,11 +10,7 @@ export default function NotFound() {
     { name: 'Metodología', href: '/metodologia', icon: <ShieldCheck size={18} /> },
   ];
 
-  const featuredMeds = [
-    { name: 'Paracetamol', href: '/prospectos/paracetamol-123' },
-    { name: 'Ibuprofeno', href: '/prospectos/ibuprofeno-456' },
-    { name: 'Omeprazol', href: '/prospectos/omeprazol-789' },
-  ];
+  const featuredMeds: { name: string; href: string }[] = [];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6 font-sans">
