@@ -90,13 +90,5 @@ export function buildClinicalJsonLd(clinical: ClinicalDataForJsonLd): JsonLdNode
     })
   }
 
-  if (clinical.administracion) {
-    jsonLdNodes.push({
-      '@type': 'DrugRoute',
-      name: 'Vía de administración',
-      description: clinical.administracion,
-    })
-  }
-
   return jsonLdNodes
 }

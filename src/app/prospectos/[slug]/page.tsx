@@ -207,14 +207,14 @@ const fetchMedicamento = cache(async (nombre: string): Promise<Medicamento | nul
       registro: raw.nregistro || '',
       laboratorio: raw.labtitular || '',
       laboratorioComercializador: raw.labcomercializador || '',
-      receta: raw.receta || false,
+      receta: raw.receta ?? null,
       conduc: raw.conduc || false,
       cpresc: raw.cpresc || '',
       vias: (raw.viasAdministracion || []).map((v: any) => v.nombre),
       imagenUrl: raw.fotos?.[0]?.url || null,
       prospectoUrl: (raw.docs || []).find((d: any) => d.tipo === 2)?.url || null,
       fichaTecnicaUrl: (raw.docs || []).find((d: any) => d.tipo === 1)?.url || null,
-      generico: raw.generico || false,
+      generico: raw.generico ?? null,
       triangulo: raw.triangulo || false,
       psum: raw.psum || false,
       notas: raw.notas || false,
@@ -283,14 +283,14 @@ const fetchMedicamentoByNregistro = cache(async (nregistro: string): Promise<Med
       registro: raw.nregistro || '',
       laboratorio: raw.labtitular || '',
       laboratorioComercializador: raw.labcomercializador || '',
-      receta: raw.receta || false,
+      receta: raw.receta ?? null,
       conduc: raw.conduc || false,
       cpresc: raw.cpresc || '',
       vias: (raw.viasAdministracion || []).map((v: any) => v.nombre),
       imagenUrl: raw.fotos?.[0]?.url || null,
       prospectoUrl: (raw.docs || []).find((d: any) => d.tipo === 2)?.url || null,
       fichaTecnicaUrl: (raw.docs || []).find((d: any) => d.tipo === 1)?.url || null,
-      generico: raw.generico || false,
+      generico: raw.generico ?? null,
       triangulo: raw.triangulo || false,
       psum: raw.psum || false,
       notas: raw.notas || false,
@@ -489,6 +489,19 @@ export default async function ProspectoPage({ params }: Props) {
     }
   } catch { /* best-effort: clinical data is optional */ }
 
+  const clinicalMentions = clinicalJsonLdNodes.filter(
+    (node) => node['@type'] !== 'DrugRoute',
+  );
+
+  const clinicalAdditionalProperties: Record<string, any>[] = [];
+  if (clinicalData?.administracion) {
+    clinicalAdditionalProperties.push({
+      '@type': 'PropertyValue',
+      name: 'Vía de administración',
+      value: clinicalData.administracion,
+    });
+  }
+
   const jsonLd: Record<string, any> = {
     '@context': 'https://schema.org',
     '@type': 'Drug',
@@ -500,10 +513,14 @@ export default async function ProspectoPage({ params }: Props) {
       ? m.principiosActivos.map(p => p.nombre)
       : (principio ? [principio] : undefined),
     dosageForm: m.formaFarmaceutica || undefined,
-    administrationRoute: m.vias.length > 0 ? { '@type': 'DrugRoute', name: m.vias.join(', ') } : undefined,
-    prescriptionStatus: m.receta ? 'PrescriptionRequired' : 'OTC',
+    administrationRoute: m.vias.length > 0 ? m.vias.join(', ') : undefined,
+    prescriptionStatus: m.receta === true
+      ? 'https://schema.org/PrescriptionOnly'
+      : m.receta === false
+        ? 'https://schema.org/OTC'
+        : undefined,
     legalStatus: m.cpresc || undefined,
-    isAvailableGenerically: m.generico || undefined,
+    isAvailableGenerically: m.generico === null ? undefined : m.generico,
     drugClass: m.atcs?.length ? {
       '@type': 'DrugClass',
       name: m.atcs[m.atcs.length - 1].nombre,
@@ -515,12 +532,25 @@ export default async function ProspectoPage({ params }: Props) {
     } : undefined,
     warning: m.conduc ? 'Puede afectar a la capacidad de conducir' : undefined,
     identifier: m.registro ? { '@type': 'PropertyValue', propertyID: 'AEMPS', value: m.registro } : undefined,
-    ...(clinicalJsonLdNodes.length > 0 ? { subjectOf: clinicalJsonLdNodes } : {}),
+    ...(clinicalAdditionalProperties.length > 0 ? { additionalProperty: clinicalAdditionalProperties } : {}),
   };
   Object.keys(jsonLd).forEach(k => { if (jsonLd[k] === undefined) delete jsonLd[k]; });
 
-  // Breadcrumb con retorno a la letra indexada del medicamento (redistribuye autoridad).
-  // Solo enlaza si la letra tiene al menos un medicamento indexado (evita enlaces a 404).
+  // Fecha de revisión CIMA para dateModified (preferir rev, fallback a aut)
+  const cimaDate = m.estado?.rev || m.estado?.aut || null;
+  const dateModified = cimaDate ? new Date(cimaDate).toISOString() : undefined;
+
+  // WebPage wrapper with clinical mentions (single representation, no duplicates)
+  const webPageLd: Record<string, any> = {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: m.nombre,
+    url: `${SITE_URL}/prospectos/${canonicalSlug}`,
+    description: `Información del medicamento ${m.nombre} basada en datos oficiales de la AEMPS (CIMA).`,
+    mainEntity: jsonLd,
+    ...(clinicalMentions.length > 0 ? { mentions: clinicalMentions } : {}),
+    ...(dateModified ? { dateModified } : {}),
+  };
   const firstChar = m.nombre.charAt(0);
   const letterCandidate = /^[a-zA-Z]$/.test(firstChar) ? firstChar.toUpperCase() : null;
   let letter: string | null = null;
@@ -544,20 +574,6 @@ export default async function ProspectoPage({ params }: Props) {
     ],
   };
 
-  // Fecha de revisión CIMA para dateModified (preferir rev, fallback a aut)
-  const cimaDate = m.estado?.rev || m.estado?.aut || null;
-  const dateModified = cimaDate ? new Date(cimaDate).toISOString() : undefined;
-
-  const webPageLd: Record<string, any> = {
-    '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    name: m.nombre,
-    url: `${SITE_URL}/prospectos/${canonicalSlug}`,
-    description: `Información del medicamento ${m.nombre} basada en datos oficiales de la AEMPS (CIMA).`,
-    mainEntity: jsonLd,
-    ...(dateModified ? { dateModified } : {}),
-  };
-
   return (
     <>
       <script
@@ -568,13 +584,6 @@ export default async function ProspectoPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
       />
-      {clinicalJsonLdNodes.map((node, index) => (
-        <script
-          key={`clinical-${index}`}
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(node) }}
-        />
-      ))}
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '1rem 1.5rem 0', width: '100%' }}>
         <nav aria-label="Breadcrumb" style={{ fontSize: 13, color: '#94A3B8', marginBottom: '0.5rem' }}>
           <Link href="/" style={{ color: '#94A3B8', textDecoration: 'none' }}>Inicio</Link>
