@@ -115,6 +115,241 @@ export default async function PrincipioActivoPage({ params }: Props) {
 
   const displayName = (entity.nombre_canonico || titleCaseSlug(entity.slug));
 
+  // Enriquecimiento exclusivo para el prototipo de Atorvastatina (datos existentes, sin rediseño).
+  let atorvastatinaDoseSummary: string | null = null;
+  let atorvastatinaAtc4: { code: string; name: string } | null = null;
+  let atorvastatinaShowLimitNotice = false;
+  let paMedicineCount = drugs.length;
+  if (slug === 'atorvastatina') {
+    paMedicineCount = entity.medicine_count;
+    const doseCounts = new Map<string, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const dose = m[1].replace(',', '.') + ' mg';
+        doseCounts.set(dose, (doseCounts.get(dose) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([d]) => d)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+      if (top.length > 0) {
+        atorvastatinaDoseSummary = top.join(', ').replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) atorvastatinaAtc4 = { code: l4.code, name: l4.name };
+    if (paMedicineCount > drugs.length) atorvastatinaShowLimitNotice = true;
+  }
+
+  // Enriquecimiento exclusivo para el prototipo de Dabigatrán (datos existentes, sin rediseño).
+  let dabigatranDoseSummary: string | null = null;
+  let dabigatranAtc4: { code: string; name: string } | null = null;
+  if (slug === 'dabigatran') {
+    const doseCounts = new Map<string, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const dose = m[1].replace(',', '.') + ' mg';
+        doseCounts.set(dose, (doseCounts.get(dose) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([d]) => d)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+      if (top.length > 0) {
+        dabigatranDoseSummary = top.join(', ').replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) dabigatranAtc4 = { code: l4.code, name: l4.name };
+  }
+
+  // Enriquecimiento exclusivo para el prototipo de Quetiapina (datos existentes, sin rediseño).
+  let quetiapinaDoseSummary: string | null = null;
+  let quetiapinaAtc4: { code: string; name: string } | null = null;
+  let quetiapinaShowLimitNotice = false;
+  if (slug === 'quetiapina') {
+    paMedicineCount = entity.medicine_count;
+    const doseCounts = new Map<string, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const dose = m[1].replace(',', '.') + ' mg';
+        doseCounts.set(dose, (doseCounts.get(dose) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([d]) => d)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+      if (top.length > 0) {
+        quetiapinaDoseSummary = top.join(', ').replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) quetiapinaAtc4 = { code: l4.code, name: l4.name };
+    if (paMedicineCount > drugs.length) quetiapinaShowLimitNotice = true;
+  }
+
+  // Enriquecimiento exclusivo para el prototipo de Pregabalina (datos existentes, sin rediseño).
+  let pregabalinaDoseSummary: string | null = null;
+  let pregabalinaAtc4: { code: string; name: string } | null = null;
+  let pregabalinaShowLimitNotice = false;
+  if (slug === 'pregabalina') {
+    paMedicineCount = entity.medicine_count;
+    const doseCounts = new Map<string, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const dose = m[1].replace(',', '.') + ' mg';
+        doseCounts.set(dose, (doseCounts.get(dose) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([d]) => d)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+      if (top.length > 0) {
+        pregabalinaDoseSummary = top.join(', ').replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) pregabalinaAtc4 = { code: l4.code, name: l4.name };
+    if (paMedicineCount > drugs.length) pregabalinaShowLimitNotice = true;
+  }
+
+  // Enriquecimiento exclusivo para el prototipo de Olanzapina (datos existentes, sin rediseño).
+  let olanzapinaDoseSummary: string | null = null;
+  let olanzapinaAtc4: { code: string; name: string } | null = null;
+  let olanzapinaShowLimitNotice = false;
+  if (slug === 'olanzapina') {
+    paMedicineCount = entity.medicine_count;
+    const doseCounts = new Map<string, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const dose = m[1].replace(',', '.') + ' mg';
+        doseCounts.set(dose, (doseCounts.get(dose) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([d]) => d)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+      if (top.length > 0) {
+        olanzapinaDoseSummary = top.join(', ').replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) olanzapinaAtc4 = { code: l4.code, name: l4.name };
+    if (paMedicineCount > drugs.length) olanzapinaShowLimitNotice = true;
+  }
+
+  // Enriquecimiento exclusivo para el prototipo de Levetiracetam (datos existentes, sin rediseño).
+  let levetiracetamDoseSummary: string | null = null;
+  let levetiracetamAtc4: { code: string; name: string } | null = null;
+  let levetiracetamShowLimitNotice = false;
+  if (slug === 'levetiracetam') {
+    paMedicineCount = entity.medicine_count;
+    const doseCounts = new Map<number, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const num = parseFloat(m[1].replace(',', '.'));
+        doseCounts.set(num, (doseCounts.get(num) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([n]) => n)
+        .sort((a, b) => a - b);
+      if (top.length > 0) {
+        levetiracetamDoseSummary = top
+          .map((n) => (n >= 1000 ? n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.') : n.toString()) + ' mg')
+          .join(', ')
+          .replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) levetiracetamAtc4 = { code: l4.code, name: l4.name };
+    if (paMedicineCount > drugs.length) levetiracetamShowLimitNotice = true;
+  }
+
+  // Enriquecimiento exclusivo para el prototipo de Tramadol (datos existentes, sin rediseño).
+  let tramadolDoseSummary: string | null = null;
+  let tramadolAtc4: { code: string; name: string } | null = null;
+  if (slug === 'tramadol') {
+    const doseCounts = new Map<string, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const dose = m[1].replace(',', '.') + ' mg';
+        doseCounts.set(dose, (doseCounts.get(dose) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([d]) => d)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+      if (top.length > 0) {
+        tramadolDoseSummary = top.join(', ').replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) tramadolAtc4 = { code: l4.code, name: l4.name };
+  }
+
+  // Enriquecimiento exclusivo para el prototipo de Topiramato (datos existentes, sin rediseño).
+  let topiramatoDoseSummary: string | null = null;
+  let topiramatoAtc4: { code: string; name: string } | null = null;
+  if (slug === 'topiramato') {
+    const doseCounts = new Map<string, number>();
+    let classified = 0;
+    for (const d of drugs) {
+      const m = d.nombre.match(/(\d+(?:[.,]\d+)?)\s*mg/i);
+      if (m) {
+        const dose = m[1].replace(',', '.') + ' mg';
+        doseCounts.set(dose, (doseCounts.get(dose) || 0) + 1);
+        classified++;
+      }
+    }
+    if (classified === drugs.length && doseCounts.size > 0) {
+      const top = [...doseCounts.entries()]
+        .filter(([, c]) => c >= 5)
+        .map(([d]) => d)
+        .sort((a, b) => parseFloat(a) - parseFloat(b));
+      if (top.length > 0) {
+        topiramatoDoseSummary = top.join(', ').replace(/, ([^,]*)$/, ' y $1');
+      }
+    }
+    const l4 = atcCodes.find((a) => a.level === 4);
+    if (l4) topiramatoAtc4 = { code: l4.code, name: l4.name };
+  }
+
   const breadcrumbLd = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -146,8 +381,7 @@ export default async function PrincipioActivoPage({ params }: Props) {
       <h1 style={S.h1}>{displayName}</h1>
       <p style={S.subtitle}>
         El principio activo <strong style={{ color: '#D1D5DB' }}>{displayName.toLowerCase()}</strong> está presente
-        en <strong style={{ color: '#D1D5DB' }}>{drugs.length}</strong> medicamento{drugs.length !== 1 ? 's' : ''}
-        disponible{drugs.length !== 1 ? 's' : ''} en España.
+        en <strong style={{ color: '#D1D5DB' }}>{paMedicineCount} </strong> medicamentos disponibles en España.
         {atcCodes.length > 0 && (() => {
           const g3 = atcCodes.filter((a) => a.level === 3).slice(0, 1);
           return g3.length > 0 ? (
@@ -158,9 +392,104 @@ export default async function PrincipioActivoPage({ params }: Props) {
             {'. '}
             </>
           ) : null;
-        })()} Consulta sus prospectos y accede a información oficial basada en datos de la AEMPS (CIMA).
-      </p>
-
+        })()}
+        {slug === 'dabigatran' && dabigatranDoseSummary && (
+          <> Las dosis más frecuentes son <strong style={{ color: '#D1D5DB' }}>{dabigatranDoseSummary}</strong>.</>
+        )}
+        {slug === 'dabigatran' && dabigatranAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${dabigatranAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {dabigatranAtc4.code} — {dabigatranAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {slug === 'atorvastatina' && atorvastatinaDoseSummary && (
+          <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{atorvastatinaDoseSummary}</strong>.</>
+        )}
+        {slug === 'atorvastatina' && atorvastatinaAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${atorvastatinaAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {atorvastatinaAtc4.code} — {atorvastatinaAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {slug === 'atorvastatina' && atorvastatinaShowLimitNotice && (
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
+        )}
+        {slug === 'quetiapina' && quetiapinaDoseSummary && (
+          <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{quetiapinaDoseSummary}</strong>.</>
+        )}
+        {slug === 'quetiapina' && quetiapinaAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${quetiapinaAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {quetiapinaAtc4.code} — {quetiapinaAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {slug === 'quetiapina' && quetiapinaShowLimitNotice && (
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
+        )}
+        {slug === 'pregabalina' && pregabalinaDoseSummary && (
+          <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{pregabalinaDoseSummary}</strong>.</>
+        )}
+        {slug === 'pregabalina' && pregabalinaAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${pregabalinaAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {pregabalinaAtc4.code} — {pregabalinaAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {slug === 'pregabalina' && pregabalinaShowLimitNotice && (
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
+        )}
+        {slug === 'olanzapina' && olanzapinaDoseSummary && (
+          <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{olanzapinaDoseSummary}</strong>.</>
+        )}
+        {slug === 'olanzapina' && olanzapinaAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${olanzapinaAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {olanzapinaAtc4.code} — {olanzapinaAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {slug === 'olanzapina' && olanzapinaShowLimitNotice && (
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
+        )}
+        {slug === 'levetiracetam' && levetiracetamDoseSummary && (
+          <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{levetiracetamDoseSummary}</strong>.</>
+        )}
+        {slug === 'levetiracetam' && levetiracetamAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${levetiracetamAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {levetiracetamAtc4.code} — {levetiracetamAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {slug === 'levetiracetam' && levetiracetamShowLimitNotice && (
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
+        )}
+        {slug === 'tramadol' && tramadolDoseSummary && (
+          <> Las dosis más frecuentes son <strong style={{ color: '#D1D5DB' }}>{tramadolDoseSummary}</strong>.</>
+        )}
+        {slug === 'tramadol' && tramadolAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${tramadolAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {tramadolAtc4.code} — {tramadolAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {slug === 'topiramato' && topiramatoDoseSummary && (
+          <> Las dosis más frecuentes son <strong style={{ color: '#D1D5DB' }}>{topiramatoDoseSummary}</strong>.</>
+        )}
+        {slug === 'topiramato' && topiramatoAtc4 && (
+          <> Pertenece al subgrupo ATC{' '}
+            <Link href={`/atc/${topiramatoAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
+              {topiramatoAtc4.code}   {topiramatoAtc4.name.toLowerCase()}
+            </Link>.
+          </>
+        )}
+        {'}'}</p>
+        Consulta sus prospectos y accede a información oficial basada en datos de la AEMPS (CIMA).
       <div style={S.grid}>
         {drugs.map((d) => (
           <div key={d.nregistro} style={S.drugCard}>
