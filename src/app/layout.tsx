@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
@@ -21,6 +21,11 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://nartalis.com'),
   title: "Nartalis — Información oficial de medicamentos | AEMPS",
   description: "Consulta información oficial de medicamentos basada en datos de la AEMPS. Busca medicamentos, consulta prospectos y encuentra información clara y fiable en Nartalis.",
+  verification: {
+    other: {
+      "msvalidate.01": "0DEB555E1CED3C693A55801D0E572754",
+    },
+  },
   openGraph: {
     siteName: 'Nartalis',
     locale: 'es_ES',
