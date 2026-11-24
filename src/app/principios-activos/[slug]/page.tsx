@@ -7,11 +7,9 @@ import { makeSlug } from '@/lib/slug';
 import { resolvePa } from '@/lib/pa-resolve';
 
 export const revalidate = 86400;
-const PAGE_SIZE = 100;
 
 interface Props {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ pagina?: string | string[] }>;
 }
 
 interface DrugRow {
@@ -21,8 +19,7 @@ interface DrugRow {
 
 // CIMA ?nombre= DEJA DE USARSE para resolver la existencia del PA.
 // La lista de medicamentos proviene de pa_cache.pa_principle_id JOIN farma_name_cache.
-async function fetchDrugsByPrincipleId(principleId: number, page: number): Promise<DrugRow[]> {
-  const offset = (page - 1) * PAGE_SIZE;
+async function fetchDrugsByPrincipleId(principleId: number): Promise<DrugRow[]> {
   try {
     const rows = await sql`
       SELECT DISTINCT fc.nombre, fc.nregistro
@@ -30,35 +27,12 @@ async function fetchDrugsByPrincipleId(principleId: number, page: number): Promi
       JOIN farma_name_cache fc ON fc.nregistro = pc.nregistro
       WHERE pc.pa_principle_id = ${principleId}
       ORDER BY fc.nombre
-      LIMIT ${PAGE_SIZE}
-      OFFSET ${offset}
+      LIMIT 100
     `;
     return rows as DrugRow[];
   } catch {
     return [];
   }
-}
-
-async function countDrugsByPrincipleId(principleId: number): Promise<number> {
-  try {
-    const rows = await sql`
-      SELECT COUNT(DISTINCT fc.nregistro)::int AS c
-      FROM pa_cache pc
-      JOIN farma_name_cache fc ON fc.nregistro = pc.nregistro
-      WHERE pc.pa_principle_id = ${principleId}
-    ` as { c: number }[];
-    return rows[0]?.c ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
-function parsePageParam(raw: string | string[] | undefined): number | null {
-  if (raw === undefined) return 1;
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (!/^\d+$/.test(value)) return null;
-  const page = Number.parseInt(value, 10);
-  return page >= 1 ? page : null;
 }
 
 async function fetchAtcByPrincipleId(principleId: number): Promise<{ code: string; level: number; name: string }[]> {
@@ -82,12 +56,11 @@ function titleCaseSlug(slug: string): string {
   return slug.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const { pagina } = await searchParams;
-  const requestedPage = parsePageParam(pagina);
   const { entity, aliasRedirectTo } = await resolvePa(slug);
   if (aliasRedirectTo) {
+    // alias: redirige. La canonical es la del destino.
     return catalogMetadata(
       `${titleCaseSlug(aliasRedirectTo)} — Medicamentos y prospectos | Nartalis`,
       `Consulta los medicamentos que contienen ${titleCaseSlug(aliasRedirectTo).toLowerCase()} y accede a sus prospectos e información basada en datos oficiales de CIMA/AEMPS.`,
@@ -101,12 +74,10 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
       `https://nartalis.com/principios-activos/${slug}`,
     );
   }
-  const baseUrl = `https://nartalis.com/principios-activos/${entity.slug}`;
-  const canonical = requestedPage && requestedPage > 1 ? `${baseUrl}?pagina=${requestedPage}` : baseUrl;
   return catalogMetadata(
     `${entity.nombre_canonico} — Medicamentos y prospectos | Nartalis`,
     `Consulta los medicamentos que contienen ${entity.nombre_canonico.toLowerCase()} y accede a sus prospectos e información basada en datos oficiales de CIMA/AEMPS.`,
-    canonical,
+    `https://nartalis.com/principios-activos/${entity.slug}`,
   );
 }
 
@@ -127,35 +98,30 @@ const S = {
   breadcrumbSep: { margin: '0 0.4rem', color: '#64748B' },
 };
 
-export default async function PrincipioActivoPage({ params, searchParams }: Props) {
+export default async function PrincipioActivoPage({ params }: Props) {
   const { slug } = await params;
-  const { pagina } = await searchParams;
-  const requestedPage = parsePageParam(pagina);
-  if (!requestedPage) notFound();
-
   const { entity, aliasRedirectTo, notFound: shouldNotFound } = await resolvePa(slug);
 
+  // BLOQUE 2: alias -> 301 permanente hacia el canonical (manejado por middleware).
+  // `permanentRedirect` es el fallback (Next emite 308); el 301 real lo impone middleware.ts.
   if (aliasRedirectTo) permanentRedirect(`/principios-activos/${aliasRedirectTo}`);
+  // no entity / inactive => 404 real
   if (shouldNotFound || !entity) notFound();
 
-  const [total, atcCodes] = await Promise.all([
-    countDrugsByPrincipleId(entity.id),
-    fetchAtcByPrincipleId(entity.id),
-  ]);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  if (requestedPage > totalPages) notFound();
+  const drugs = await fetchDrugsByPrincipleId(entity.id);
+  const atcCodes = await fetchAtcByPrincipleId(entity.id);
 
-  const drugs = await fetchDrugsByPrincipleId(entity.id, requestedPage);
   if (drugs.length === 0) notFound();
 
   const displayName = (entity.nombre_canonico || titleCaseSlug(entity.slug));
-  const paMedicineCount = total;
 
   // Enriquecimiento exclusivo para el prototipo de Atorvastatina (datos existentes, sin rediseño).
   let atorvastatinaDoseSummary: string | null = null;
   let atorvastatinaAtc4: { code: string; name: string } | null = null;
   let atorvastatinaShowLimitNotice = false;
+  let paMedicineCount = drugs.length;
   if (slug === 'atorvastatina') {
+    paMedicineCount = entity.medicine_count;
     const doseCounts = new Map<string, number>();
     let classified = 0;
     for (const d of drugs) {
@@ -212,6 +178,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
   let quetiapinaAtc4: { code: string; name: string } | null = null;
   let quetiapinaShowLimitNotice = false;
   if (slug === 'quetiapina') {
+    paMedicineCount = entity.medicine_count;
     const doseCounts = new Map<string, number>();
     let classified = 0;
     for (const d of drugs) {
@@ -241,6 +208,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
   let pregabalinaAtc4: { code: string; name: string } | null = null;
   let pregabalinaShowLimitNotice = false;
   if (slug === 'pregabalina') {
+    paMedicineCount = entity.medicine_count;
     const doseCounts = new Map<string, number>();
     let classified = 0;
     for (const d of drugs) {
@@ -270,6 +238,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
   let olanzapinaAtc4: { code: string; name: string } | null = null;
   let olanzapinaShowLimitNotice = false;
   if (slug === 'olanzapina') {
+    paMedicineCount = entity.medicine_count;
     const doseCounts = new Map<string, number>();
     let classified = 0;
     for (const d of drugs) {
@@ -299,6 +268,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
   let levetiracetamAtc4: { code: string; name: string } | null = null;
   let levetiracetamShowLimitNotice = false;
   if (slug === 'levetiracetam') {
+    paMedicineCount = entity.medicine_count;
     const doseCounts = new Map<number, number>();
     let classified = 0;
     for (const d of drugs) {
@@ -411,8 +381,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
       <h1 style={S.h1}>{displayName}</h1>
       <p style={S.subtitle}>
         El principio activo <strong style={{ color: '#D1D5DB' }}>{displayName.toLowerCase()}</strong> está presente
-        en <strong style={{ color: '#D1D5DB' }}>{paMedicineCount}</strong> medicamentos disponibles en España.
-        {totalPages > 1 && <> Página {requestedPage} de {totalPages}.</>}
+        en <strong style={{ color: '#D1D5DB' }}>{paMedicineCount} </strong> medicamentos disponibles en España.
         {atcCodes.length > 0 && (() => {
           const g3 = atcCodes.filter((a) => a.level === 3).slice(0, 1);
           return g3.length > 0 ? (
@@ -445,7 +414,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
           </>
         )}
         {slug === 'atorvastatina' && atorvastatinaShowLimitNotice && (
-          <> Se muestran {drugs.length} medicamentos en esta página.</>
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
         )}
         {slug === 'quetiapina' && quetiapinaDoseSummary && (
           <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{quetiapinaDoseSummary}</strong>.</>
@@ -458,7 +427,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
           </>
         )}
         {slug === 'quetiapina' && quetiapinaShowLimitNotice && (
-          <> Se muestran {drugs.length} medicamentos en esta página.</>
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
         )}
         {slug === 'pregabalina' && pregabalinaDoseSummary && (
           <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{pregabalinaDoseSummary}</strong>.</>
@@ -471,7 +440,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
           </>
         )}
         {slug === 'pregabalina' && pregabalinaShowLimitNotice && (
-          <> Se muestran {drugs.length} medicamentos en esta página.</>
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
         )}
         {slug === 'olanzapina' && olanzapinaDoseSummary && (
           <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{olanzapinaDoseSummary}</strong>.</>
@@ -484,7 +453,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
           </>
         )}
         {slug === 'olanzapina' && olanzapinaShowLimitNotice && (
-          <> Se muestran {drugs.length} medicamentos en esta página.</>
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
         )}
         {slug === 'levetiracetam' && levetiracetamDoseSummary && (
           <> Las dosis disponibles son <strong style={{ color: '#D1D5DB' }}>{levetiracetamDoseSummary}</strong>.</>
@@ -497,7 +466,7 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
           </>
         )}
         {slug === 'levetiracetam' && levetiracetamShowLimitNotice && (
-          <> Se muestran {drugs.length} medicamentos en esta página.</>
+          <> Se muestran los primeros {drugs.length} medicamentos.</>
         )}
         {slug === 'tramadol' && tramadolDoseSummary && (
           <> Las dosis más frecuentes son <strong style={{ color: '#D1D5DB' }}>{tramadolDoseSummary}</strong>.</>
@@ -515,12 +484,12 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
         {slug === 'topiramato' && topiramatoAtc4 && (
           <> Pertenece al subgrupo ATC{' '}
             <Link href={`/atc/${topiramatoAtc4.code}`} style={{ color: '#A78BFA', textDecoration: 'none' }}>
-              {topiramatoAtc4.code} — {topiramatoAtc4.name.toLowerCase()}
+              {topiramatoAtc4.code}   {topiramatoAtc4.name.toLowerCase()}
             </Link>.
           </>
         )}
-        {' '}Consulta sus prospectos y accede a información oficial basada en datos de la AEMPS (CIMA).
-      </p>
+        {'}'}</p>
+        Consulta sus prospectos y accede a información oficial basada en datos de la AEMPS (CIMA).
       <div style={S.grid}>
         {drugs.map((d) => (
           <div key={d.nregistro} style={S.drugCard}>
@@ -537,32 +506,6 @@ export default async function PrincipioActivoPage({ params, searchParams }: Prop
           </div>
         ))}
       </div>
-
-      {totalPages > 1 && (
-        <nav aria-label="Paginación" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '2rem' }}>
-          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
-            const href = p === 1 ? `/principios-activos/${entity.slug}` : `/principios-activos/${entity.slug}?pagina=${p}`;
-            const active = p === requestedPage;
-            return (
-              <Link
-                key={p}
-                href={href}
-                style={{
-                  padding: '0.35rem 0.7rem',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  textDecoration: 'none',
-                  color: active ? '#EDEDED' : '#A78BFA',
-                  background: active ? 'rgba(103,72,253,0.35)' : 'rgba(255,255,255,0.04)',
-                  border: active ? '1px solid rgba(103,72,253,0.7)' : '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                {p}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
 
       {atcCodes.length > 0 && (
         <div style={{ marginTop: '1rem' }}>
