@@ -22,21 +22,27 @@ export interface RelatedRow {
   nregistro: string;
 }
 
-async function queryRelatedByPa(nregistro: string, principio: string): Promise<RelatedRow[]> {
+async function queryRelatedByPa(nregistro: string, principio: string, exclude: string[] = []): Promise<RelatedRow[]> {
   return await sql`
     SELECT DISTINCT fc.nombre, fc.nregistro
     FROM pa_cache pa JOIN farma_name_cache fc ON pa.nregistro = fc.nregistro
-    WHERE pa.principio = ${principio.toLowerCase()} AND pa.nregistro != ${nregistro}
-    ORDER BY fc.nombre LIMIT 5
+    WHERE pa.principio = ${principio.toLowerCase()}
+      AND pa.nregistro != ${nregistro}
+      AND NOT (pa.nregistro = ANY(${exclude}))
+    ORDER BY md5(${nregistro} || pa.nregistro)
+    LIMIT 5
   ` as RelatedRow[];
 }
 
-async function queryRelatedByAtc(nregistro: string, atcL4Code: string): Promise<RelatedRow[]> {
+async function queryRelatedByAtc(nregistro: string, atcL4Code: string, exclude: string[] = []): Promise<RelatedRow[]> {
   return await sql`
     SELECT DISTINCT fc.nombre, fc.nregistro
     FROM atc_cache atc JOIN farma_name_cache fc ON atc.nregistro = fc.nregistro
-    WHERE atc.code = ${atcL4Code} AND atc.nregistro != ${nregistro}
-    ORDER BY fc.nombre LIMIT 5
+    WHERE atc.code = ${atcL4Code}
+      AND atc.nregistro != ${nregistro}
+      AND NOT (atc.nregistro = ANY(${exclude}))
+    ORDER BY md5(${nregistro} || atc.nregistro)
+    LIMIT 5
   ` as RelatedRow[];
 }
 
@@ -47,13 +53,13 @@ export const getCanonicalPaLinks = unstable_cache(
 );
 
 export const getRelatedByPa = unstable_cache(
-  (nregistro: string, principio: string): Promise<RelatedRow[]> => queryRelatedByPa(nregistro, principio),
+  (nregistro: string, principio: string, exclude: string[] = []): Promise<RelatedRow[]> => queryRelatedByPa(nregistro, principio, exclude),
   ['prospect-related-pa'],
   { revalidate: TTL, tags: ['pa-related'] },
 );
 
 export const getRelatedByAtc = unstable_cache(
-  (nregistro: string, atcL4Code: string): Promise<RelatedRow[]> => queryRelatedByAtc(nregistro, atcL4Code),
+  (nregistro: string, atcL4Code: string, exclude: string[] = []): Promise<RelatedRow[]> => queryRelatedByAtc(nregistro, atcL4Code, exclude),
   ['prospect-related-atc'],
   { revalidate: TTL, tags: ['atc-related'] },
 );

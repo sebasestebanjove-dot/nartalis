@@ -8,6 +8,7 @@ import { makeSlug } from '@/lib/slug';
 import { ingestPrincipleIfPresent } from '@/lib/pa-principle';
 import { getCanonicalPaLinks, getRelatedByAtc, getRelatedByPa, getLetterCount } from '@/lib/prospect-cache';
 import { getClinicalDataForJsonLd, buildClinicalJsonLd, type ClinicalDataForJsonLd } from '@/lib/cima-clinical-public';
+import { isClinicalPilot, getClinicalPilotData, type ClinicalPilotData } from '@/lib/clinical-pilot';
 import ProspectoView from '@/components/farma/screens/ProspectoView';
 import type { Medicamento } from '@/components/farma/types';
 import type { PaLink } from '@/components/farma/screens/ProspectoView';
@@ -475,19 +476,48 @@ export default async function ProspectoPage({ params }: Props) {
       relatedPa = await getRelatedByPa(m.registro, principio);
     }
     if (atcL4Code) {
-      relatedAtc = await getRelatedByAtc(m.registro, atcL4Code);
+      relatedAtc = await getRelatedByAtc(m.registro, atcL4Code, relatedPa.map((r) => r.nregistro));
     }
   } catch { /* best-effort */ }
 
-  // Fetch clinical data for JSON-LD enrichment (only GOOD quality)
+  // P0.2: contenido clínico limitado a la allowlist. Fuera de ella se mantiene
+  // intacto el comportamiento anterior basado en la última extracción good.
+  let pilotClinical: ClinicalPilotData | null = null;
   let clinicalData: ClinicalDataForJsonLd | null = null;
   let clinicalJsonLdNodes: Record<string, any>[] = [];
-  try {
-    clinicalData = await getClinicalDataForJsonLd(m.registro);
-    if (clinicalData) {
-      clinicalJsonLdNodes = buildClinicalJsonLd(clinicalData);
-    }
-  } catch { /* best-effort: clinical data is optional */ }
+
+  if (isClinicalPilot(m.registro)) {
+    try {
+      pilotClinical = await getClinicalPilotData(m.registro);
+      if (pilotClinical) {
+        clinicalData = {
+          nregistro: pilotClinical.nregistro,
+          documentType: pilotClinical.documentType,
+          sourceUrl: pilotClinical.sourceUrl,
+          extractedAt: pilotClinical.extractedAt,
+          indicaciones: pilotClinical.indicaciones,
+          contraindicaciones: pilotClinical.contraindicaciones,
+          advertencias: pilotClinical.advertencias,
+          posologia: pilotClinical.posologia,
+          administracion: null,
+          efectosAdversos: null,
+          interacciones: null,
+          embarazoLactancia: pilotClinical.embarazoLactancia,
+          conduccion: pilotClinical.conduccion,
+          composicion: null,
+          excipientes: null,
+        };
+        clinicalJsonLdNodes = buildClinicalJsonLd(clinicalData);
+      }
+    } catch { /* best-effort: piloto opcional */ }
+  } else {
+    try {
+      clinicalData = await getClinicalDataForJsonLd(m.registro);
+      if (clinicalData) {
+        clinicalJsonLdNodes = buildClinicalJsonLd(clinicalData);
+      }
+    } catch { /* best-effort: clinical data is optional */ }
+  }
 
   const clinicalMentions = clinicalJsonLdNodes.filter(
     (node) => node['@type'] !== 'DrugRoute',
@@ -597,7 +627,7 @@ export default async function ProspectoPage({ params }: Props) {
           <span style={{ color: '#64748B' }}>{m.nombre}</span>
         </nav>
       </div>
-      <ProspectoView medicamento={m} relatedPa={relatedPa} relatedAtc={relatedAtc} canonicalPaLinks={canonicalPaLinks} initialSessionUser={null} initialIsSaved={false} initialIsFavorite={false} />
+      <ProspectoView medicamento={m} relatedPa={relatedPa} relatedAtc={relatedAtc} canonicalPaLinks={canonicalPaLinks} initialSessionUser={null} initialIsSaved={false} initialIsFavorite={false} clinicalPilot={pilotClinical} />
     </>
   );
 }
